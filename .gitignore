@@ -1,0 +1,112 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+sdist/
+wheels/
+*.egg-info/
+*.egg
+.installed.cfg
+MANIFEST
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ---- Testing / type checking / linting ----
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ---- Jupyter / IPython ----
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# ---- COMSOL ----
+# Recovery data, backups and autosaves written next to the .mph model
+*.mph.recovery/
+*.recovery/
+*.mph.lock
+*.mph.bak
+*.mph~
+*.status
+comsol*.log
+# Compiled COMSOL/Java method code
+*.class
+
+# ---- Simulation output & datasets ----
+# Default ComsolDatasetBuilder layout (see api/dataset_builder.py)
+output/
+outputs/
+data/
+figures/
+simulation_log.csv
+dataset.csv
+
+# ---- Model artifacts ----
+runs/
+logs/
+checkpoints/
+wandb/
+lightning_logs/
+mlruns/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# ---- Editors / IDEs ----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.spyproject/
+.spyderproject/
+
+# ---- OS ----
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# ---- Local tooling & secrets ----
+.claude/settings.local.json
+.env
+.env.*
+!.env.example
+*.local
