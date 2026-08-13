@@ -1,0 +1,25 @@
+# Pins match the working .venv (Python 3.14, Windows).
+#
+# PyTorch is the CUDA 13.2 build, which does not live on PyPI. For a
+# CPU-only install, drop the index URL below and the +cu132 suffix.
+--extra-index-url https://download.pytorch.org/whl/cu132
+
+# Core numerics: model/, utils/, api/
+numpy==2.5.1
+pandas==3.0.5
+
+# Structure-preserving latent Bloch operator: model/
+torch==2.13.0+cu132
+
+# COMSOL bridge: api/comsol_runner.py. MPh drives the Java side via JPype.
+MPh==1.3.1
+jpype1==1.7.1
+
+# Physical-core sizing and per-worker memory reporting: api/dataset_builder.py.
+# Optional; _physical_cores and _peak_rss_mb fall back when it is absent.
+psutil==7.2.2
+
+# Dispersion plots: utils/plotting.py. Not exported by utils/__init__.py in
+# this version, and kaleido is only needed to write figures to disk.
+plotly==6.9.0
+kaleido==1.3.0
