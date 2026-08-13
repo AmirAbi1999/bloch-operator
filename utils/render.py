@@ -84,7 +84,7 @@ def _cavity_boundary(theta: np.ndarray, geom: CavityGeometry) -> np.ndarray:
     """
     radius = np.sqrt(
         geom.cavity_fraction
-        / (np.pi * (1 + geom.harmonic_amplitude1 ** 2 + geom.harmonic_amplitude2 ** 2))
+        / (np.pi * (1 + 0.5 * (geom.harmonic_amplitude1 ** 2 + geom.harmonic_amplitude2 ** 2)))
     )
 
     return radius * (
