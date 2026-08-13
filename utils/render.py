@@ -43,7 +43,7 @@ class CavityGeometry:
     harmonic_order2: int
     harmonic_amplitude1: float
     harmonic_amplitude2: float
-    cavity_fraction: float = 0.3
+    cavity_fraction: float
 
     def __post_init__(self)->None:
         """Reject parameters that do not describe a valid cavity.
