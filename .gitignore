@@ -111,3 +111,4 @@ $RECYCLE.BIN/
 .env.*
 !.env.example
 *.local
+.mcp.json

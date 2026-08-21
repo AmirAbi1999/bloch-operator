@@ -15,7 +15,7 @@ At Gamma, qx = qy = 0:
 
 For a connected, traction-free 2D solid unit cell with periodicity only in
 x and y, there are two acoustic zero modes at Gamma. G0 is therefore
-parameterized to have exactly a three-dimensional right nullspace.
+parameterized to have exactly a two-dimensional right nullspace.
 
 This module contains:
     - ConvBlock
@@ -507,7 +507,7 @@ class BlochOperator(nn.Module):
         eigenvalues = all_eigenvalues[..., : self.config.n_bands]
 
         # Convert eigenvalues to frequencies
-        frequencies_hz = (
+        frequencies = (
             self.frequency_scale
             * torch.sqrt(eigenvalues)
         )
@@ -520,5 +520,5 @@ class BlochOperator(nn.Module):
             "H": h_operator,
             "D": d_operator,
             "eigenvalues": eigenvalues,
-            "frequencies_hz": frequencies_hz,
+            "frequencies": frequencies,
         }

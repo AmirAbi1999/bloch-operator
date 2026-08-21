@@ -1,4 +1,12 @@
-"""Loss functions for supervising the latent Bloch eigenspectrum."""
+"""Loss functions for supervising the latent Bloch eigenspectrum.
+
+Smooth L1 loss between the predicted eigenvalues and the target frequencies
+carried to the same scale, lambda = (f / frequency_scale)^2, with both sides
+taken under log1p and an optional weight per band.
+
+This module contains:
+    - EigenvalueSupervisedLoss
+"""
 
 from __future__ import annotations
 
