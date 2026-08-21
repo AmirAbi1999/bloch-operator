@@ -448,7 +448,7 @@ class BlochOperator(nn.Module):
             H               (batch, p, r, r), complex
             D               (batch, p, r, r), complex Hermitian PSD
             eigenvalues     (batch, p, n_bands)
-            frequencies_hz  (batch, p, n_bands)
+            frequencies  (batch, p, n_bands)
         """
         batch_size = images.size(0)
         wave_vectors = self.prepare_wavevectors(wave_vectors, batch_size)
