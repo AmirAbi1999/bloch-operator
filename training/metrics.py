@@ -70,10 +70,7 @@ class MetricTracker:
         self.band_sums = torch.zeros(())
         self.geometry_mape.clear()
 
-    def update(self,
-               predicted: Tensor,
-               target: Tensor,
-    ) -> None:
+    def update(self, predicted: Tensor, target: Tensor) -> None:
         """Accumulate the statistics of one batch.
 
         Parameters
@@ -89,12 +86,9 @@ class MetricTracker:
             If the predictions still require gradients, or if the two
             tensors do not share one shape (B, K, N).
         """
-
         self._validate(predicted, target)
 
-        target = target.to(device=predicted.device,
-                           dtype=predicted.dtype
-        )
+        target = target.to(device=predicted.device, dtype=predicted.dtype)
         error = predicted - target
         absolute = error.abs()
         squared = error.square()
@@ -139,7 +133,6 @@ class MetricTracker:
         ValueError
             If no batch has been accumulated.
         """
-
         if not self.n_geometries:
             raise ValueError("No batches have been added.")
 
@@ -155,7 +148,9 @@ class MetricTracker:
 
         # Quantiles of the scored bands, then of the per-geometry scores
         quantiles = torch.tensor([0.90, 0.95], dtype=geometry_mape.dtype)
-        geometry_p90_mape, geometry_p95_mape = geometry_mape.nanquantile(quantiles).tolist()
+        geometry_p90_mape, geometry_p95_mape = (
+            geometry_mape.nanquantile(quantiles).tolist()
+        )
 
         # Squared deviation of the targets, over every band and per band
         deviation = target_square_sum.sum() - target_sum.sum().square() / n_values
@@ -178,10 +173,7 @@ class MetricTracker:
         }
 
     @staticmethod
-    def _validate(
-            predicted: Tensor,
-            target: Tensor,
-    ) -> None:
+    def _validate(predicted: Tensor, target: Tensor) -> None:
         """Reject a batch that still carries gradients or the wrong shape.
 
         Parameters

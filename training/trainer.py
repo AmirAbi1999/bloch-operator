@@ -68,18 +68,19 @@ class Trainer:
         Directory the history and the checkpoints are written to.
     """
 
-    def __init__(self,
-                 model: BlochOperator,
-                 criterion: nn.Module,
-                 optimizer: Optimizer,
-                 device: str | torch.device = "cpu",
-                 *,
-                 scheduler: LRScheduler | None = None,
-                 grad_clip: float | None = 1.0,
-                 d4_augmentation: bool = True,
-                 patience: int | None = None,
-                 output_dir: str | Path = "runs",
-    )->None:
+    def __init__(
+        self,
+        model: BlochOperator,
+        criterion: nn.Module,
+        optimizer: Optimizer,
+        device: str | torch.device = "cpu",
+        *,
+        scheduler: LRScheduler | None = None,
+        grad_clip: float | None = 1.0,
+        d4_augmentation: bool = True,
+        patience: int | None = None,
+        output_dir: str | Path = "runs",
+    ) -> None:
         self.device = torch.device(device)
         self.model: BlochOperator = model.to(self.device)
         self.criterion = criterion.to(self.device)
@@ -98,10 +99,11 @@ class Trainer:
         self.epoch = 0
         self.best_loss = float("inf")
 
-    def fit(self,
-            train_loader: DataLoader,
-            val_loader: DataLoader,
-            epochs: int,
+    def fit(
+        self,
+        train_loader: DataLoader,
+        val_loader: DataLoader,
+        epochs: int,
     ) -> list[dict[str, float]]:
         """Train, score and checkpoint one epoch at a time.
 
@@ -166,10 +168,7 @@ class Trainer:
 
         return history
 
-    def train_epoch(
-            self,
-            loader: DataLoader,
-    ) -> dict[str, Any]:
+    def train_epoch(self, loader: DataLoader) -> dict[str, Any]:
         """Run one optimization pass over the training split.
 
         Parameters
@@ -245,10 +244,7 @@ class Trainer:
             "skipped": skipped,
         }
 
-    def validate_epoch(
-            self,
-            loader: DataLoader,
-    ) -> dict[str, Any]:
+    def validate_epoch(self, loader: DataLoader) -> dict[str, Any]:
         """Score one split without touching the parameters.
 
         Parameters
@@ -290,9 +286,11 @@ class Trainer:
 
                 if not index:
                     diagnostics = gamma_diagnostics(self.model, images)
+                    acoustic = diagnostics["max_acoustic_eigenvalue"]
+                    optical = diagnostics["min_first_optical_eigenvalue"]
                     gamma = {
-                        "gamma_acoustic": diagnostics["max_acoustic_eigenvalue"].item(),
-                        "gamma_optical": diagnostics["min_first_optical_eigenvalue"].item(),
+                        "gamma_acoustic": acoustic.item(),
+                        "gamma_optical": optical.item(),
                     }
 
         if not n_samples:
@@ -304,10 +302,11 @@ class Trainer:
             "gamma": gamma,
         }
 
-    def save_checkpoint(self,
-                        filename: str,
-                        epoch: int,
-                        validation: dict[str, Any],
+    def save_checkpoint(
+        self,
+        filename: str,
+        epoch: int,
+        validation: dict[str, Any],
     ) -> Path:
         """Write the run state and one epoch's full metrics.
 
@@ -349,9 +348,7 @@ class Trainer:
 
         return path
 
-    def load_checkpoint(self,
-                        path: str | Path,
-    ) -> int:
+    def load_checkpoint(self, path: str | Path) -> int:
         """Restore a run and report the epoch it resumes at.
 
         Parameters
@@ -378,12 +375,13 @@ class Trainer:
 
         return self.epoch + 1
 
-    def record_epoch(self,
-                     epoch: int,
-                     learning_rate: float,
-                     elapsed: float,
-                     train: dict[str, Any],
-                     validation: dict[str, Any],
+    def record_epoch(
+        self,
+        epoch: int,
+        learning_rate: float,
+        elapsed: float,
+        train: dict[str, Any],
+        validation: dict[str, Any],
     ) -> dict[str, float]:
         """Flatten one epoch into a row and append it to history.csv.
 

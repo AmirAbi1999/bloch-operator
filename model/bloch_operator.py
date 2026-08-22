@@ -45,30 +45,30 @@ class ConvBlock(nn.Module):
         Channels produced by the block.
     """
 
-    def __init__(self, in_channels: int, out_channels: int)->None:
+    def __init__(self, in_channels: int, out_channels: int) -> None:
         super().__init__()
 
         self.block = nn.Sequential(
-            nn.Conv2d(in_channels,
-                      out_channels,
-                      kernel_size=3,
-                      stride=2,
-                      padding=1,
-                      bias=False
+            nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=3,
+                stride=2,
+                padding=1,
+                bias=False,
             ),
             nn.GroupNorm(8, out_channels),
             nn.SiLU(),
-
-            nn.Conv2d(out_channels,
-                      out_channels,
-                      kernel_size=3,
-                      stride=1,
-                      padding=1,
-                      bias=False
+            nn.Conv2d(
+                out_channels,
+                out_channels,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                bias=False,
             ),
             nn.GroupNorm(8, out_channels),
             nn.SiLU(),
-
         )
 
     def forward(self, x: Tensor) -> Tensor:
@@ -100,16 +100,17 @@ class GeometryEncoder(nn.Module):
         Channel width of each stride-2 ConvBlock stage.
     """
 
-    def __init__(self,
-                 in_channels: int = 1,
-                 latent_dim: int = 256,
-                 widths: tuple[int, ...] = (32, 64, 128, 256),
-    )->None:
+    def __init__(
+        self,
+        in_channels: int = 1,
+        latent_dim: int = 256,
+        widths: tuple[int, ...] = (32, 64, 128, 256),
+    ) -> None:
         super().__init__()
 
         blocks: list[ConvBlock] = []
         current = in_channels
-        for i, width in enumerate(widths):
+        for width in widths:
             blocks.append(ConvBlock(current, width))
             current = width
 
@@ -117,9 +118,7 @@ class GeometryEncoder(nn.Module):
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
         self.projection = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(in_features=current,
-                      out_features=latent_dim
-            ),
+            nn.Linear(in_features=current, out_features=latent_dim),
             nn.SiLU(),
             nn.LayerNorm(latent_dim),
         )
@@ -143,7 +142,6 @@ class GeometryEncoder(nn.Module):
         return images
 
 
-
 class MatrixHead(nn.Module):
     """Predict an unconstrained square matrix from the latent geometry vector.
 
@@ -155,16 +153,14 @@ class MatrixHead(nn.Module):
         Side length of the predicted square matrix.
     """
 
-    def __init__(self,
-                 latent_dim: int = 256,
-                 matrix_dim: int = 16
-    )->None:
+    def __init__(self, latent_dim: int = 256, matrix_dim: int = 16) -> None:
         super().__init__()
 
         self.matrix_dim = matrix_dim
 
-        self.linear = nn.Linear(in_features=latent_dim,
-                                out_features=matrix_dim * matrix_dim
+        self.linear = nn.Linear(
+            in_features=latent_dim,
+            out_features=matrix_dim * matrix_dim,
         )
 
     def forward(self, latent: Tensor) -> Tensor:
@@ -182,10 +178,7 @@ class MatrixHead(nn.Module):
         """
         batch_size = latent.shape[0]
         matrix = self.linear(latent)
-        matrix = matrix.reshape(batch_size,
-                                self.matrix_dim,
-                                self.matrix_dim
-        )
+        matrix = matrix.reshape(batch_size, self.matrix_dim, self.matrix_dim)
 
         return matrix
 
@@ -206,20 +199,21 @@ class AcousticNullHead(nn.Module):
         direction.
     """
 
-    def __init__(self,
-                 latent_dim: int = 256,
-                 matrix_dim: int = 16,
-                 n_acoustic_modes: int = 2
-    )->None:
+    def __init__(
+        self,
+        latent_dim: int = 256,
+        matrix_dim: int = 16,
+        n_acoustic_modes: int = 2,
+    ) -> None:
         super().__init__()
         self.matrix_dim = matrix_dim
         self.n_acoustic_modes = n_acoustic_modes
         self.active_dim = matrix_dim - n_acoustic_modes
 
-        self.active_head = nn.Linear(in_features=latent_dim,
-                                     out_features=matrix_dim * self.active_dim
+        self.active_head = nn.Linear(
+            in_features=latent_dim,
+            out_features=matrix_dim * self.active_dim,
         )
-
 
     def forward(self, latent: Tensor) -> Tensor:
         """Predict the constrained Gamma-point factor G0.
@@ -239,7 +233,7 @@ class AcousticNullHead(nn.Module):
         active_block = self.active_head(latent).reshape(
             batch_size,
             self.matrix_dim,
-            self.active_dim
+            self.active_dim,
         )
 
         zero_columns = torch.zeros(
@@ -247,13 +241,10 @@ class AcousticNullHead(nn.Module):
             self.matrix_dim,
             self.n_acoustic_modes,
             dtype=latent.dtype,
-            device=latent.device
+            device=latent.device,
         )
 
-        g0 = torch.cat(
-            [zero_columns, active_block],
-            dim=-1
-        )
+        g0 = torch.cat([zero_columns, active_block], dim=-1)
 
         return g0
 
@@ -290,7 +281,6 @@ class BlochOperatorConfig:
     use_float64: bool = True
 
 
-
 class BlochOperator(nn.Module):
     """The model encodes a geometry image into a latent vector and predicts
     three real factor matrices G0, Gx, and Gy. For each nondimensional wave
@@ -314,26 +304,29 @@ class BlochOperator(nn.Module):
         If config.n_bands exceeds config.operator_dim.
     """
 
-    def __init__(self,
-                 config: BlochOperatorConfig = BlochOperatorConfig(),
-    )->None:
+    def __init__(
+        self,
+        config: BlochOperatorConfig = BlochOperatorConfig(),
+    ) -> None:
         super().__init__()
 
         if config.n_bands > config.operator_dim:
-            raise ValueError("Number of bands must not exceed the operator dimension.")
+            raise ValueError(
+                "Number of bands must not exceed the operator dimension."
+            )
 
         self.config: BlochOperatorConfig = config
 
-        # Geometry image - > latent geometry vector z
+        # Geometry image -> latent geometry vector z
         self.encoder = GeometryEncoder(
             in_channels=config.in_channels,
             latent_dim=config.latent_dim,
         )
 
         self.g0 = AcousticNullHead(
-           latent_dim = config.latent_dim,
-           matrix_dim = config.operator_dim,
-           n_acoustic_modes = config.n_acoustic_modes,
+            latent_dim=config.latent_dim,
+            matrix_dim=config.operator_dim,
+            n_acoustic_modes=config.n_acoustic_modes,
         )
 
         self.gx = MatrixHead(
@@ -348,7 +341,7 @@ class BlochOperator(nn.Module):
 
         self.register_buffer(
             "frequency_scale",
-            torch.tensor(float(config.frequency_scale))
+            torch.tensor(float(config.frequency_scale)),
         )
 
     def operators(self, images: Tensor) -> dict[str, Tensor]:
@@ -362,7 +355,8 @@ class BlochOperator(nn.Module):
         Returns
         -------
         dict[str, Tensor]
-            latent, shape (B, latent_dim); G0, Gx and Gy, each with shape (B, matrix_dim, matrix_dim).
+            latent, shape (B, latent_dim); G0, Gx and Gy, each with shape
+            (B, matrix_dim, matrix_dim).
         """
         latent = self.encoder(images)
         return {
@@ -372,12 +366,8 @@ class BlochOperator(nn.Module):
             "Gy": self.gy(latent),
         }
 
-
     @staticmethod
-    def prepare_wavevectors(
-            wave_points: Tensor,
-            batch_size: int,
-    ) -> Tensor:
+    def prepare_wavevectors(wave_points: Tensor, batch_size: int) -> Tensor:
         """Convert wave-vector input to shape (B, K, 2).
 
         Parameters
@@ -399,21 +389,16 @@ class BlochOperator(nn.Module):
             last dimension is not 2, or if its batch dimension is neither
             1 nor batch_size.
         """
-
         if wave_points.ndim == 2:
             if wave_points.shape[-1] != 2:
                 raise ValueError("wave-vectors are in 2-pairs")
 
-            wave_points = wave_points.unsqueeze(0).expand(
-                batch_size,
-                -1,
-                -1,
-            )
+            wave_points = wave_points.unsqueeze(0).expand(batch_size, -1, -1)
 
         elif wave_points.ndim == 3:
             if wave_points.shape[-1] != 2:
                 raise ValueError("wave-vectors are in 2-pairs")
-            if wave_points.shape[0]==1 and batch_size>1:
+            if wave_points.shape[0] == 1 and batch_size > 1:
                 wave_points = wave_points.expand(batch_size, -1, -1)
             elif wave_points.shape[0] != batch_size:
                 raise ValueError(
@@ -425,12 +410,11 @@ class BlochOperator(nn.Module):
 
         return wave_points
 
-
-
-    def forward(self,
-                images: Tensor,
-                wave_vectors:Tensor
-    )-> dict[str, Tensor]:
+    def forward(
+        self,
+        images: Tensor,
+        wave_vectors: Tensor,
+    ) -> dict[str, Tensor]:
         """Predict the lowest Bloch bands for each geometry and wave vector.
 
         Parameters
@@ -448,7 +432,7 @@ class BlochOperator(nn.Module):
             H               (batch, p, r, r), complex
             D               (batch, p, r, r), complex Hermitian PSD
             eigenvalues     (batch, p, n_bands)
-            frequencies  (batch, p, n_bands)
+            frequencies     (batch, p, n_bands)
         """
         batch_size = images.size(0)
         wave_vectors = self.prepare_wavevectors(wave_vectors, batch_size)
@@ -476,9 +460,7 @@ class BlochOperator(nn.Module):
         g0_eig = g0.to(dtype=real_dtype)
         gx_eig = gx.to(dtype=real_dtype)
         gy_eig = gy.to(dtype=real_dtype)
-        wave_vectors_eig = wave_vectors.to(device=g0.device,
-                                           dtype=real_dtype
-        )
+        wave_vectors_eig = wave_vectors.to(device=g0.device, dtype=real_dtype)
 
         # Extract vx and vy
         wx = wave_vectors_eig[..., 0, None, None]

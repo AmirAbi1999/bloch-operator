@@ -50,10 +50,9 @@ def d4_orbit(wave_vectors: Tensor) -> Tensor:
 
 
 def random_d4_transform(
-        wave_vectors: Tensor,
-        generator: torch.Generator | None = None,
-
-)->Tensor:
+    wave_vectors: Tensor,
+    generator: torch.Generator | None = None,
+) -> Tensor:
     """Apply one randomly selected D4 transform to every input wave vector.
 
     Parameters
@@ -68,8 +67,7 @@ def random_d4_transform(
     Tensor
         Transformed wave vectors with shape [..., 2].
     """
-
-    orbit =d4_orbit(wave_vectors)
+    orbit = d4_orbit(wave_vectors)
     index_shape = wave_vectors.shape[:-1]
 
     indices = torch.randint(
@@ -141,5 +139,3 @@ def gamma_diagnostics(
         "min_first_optical_eigenvalue": first_optical.min(),
         "acoustic_constraint_passed": acoustic.max() <= tolerance,
     }
-
-

@@ -9,6 +9,10 @@ D4 symmetry of the square unit cell:
 R is set from cavity_fraction, the share of the unit-cell area occupied by
 the cavity. render_cell samples that boundary on a square pixel grid and
 returns the solid mask consumed by the BlochOperator geometry encoder.
+
+This module contains:
+    - CavityGeometry
+    - render_cell
 """
 
 from __future__ import annotations
@@ -18,7 +22,6 @@ from dataclasses import dataclass
 import numpy as np
 
 __all__ = ["CavityGeometry", "render_cell"]
-
 
 
 @dataclass(frozen=True)
@@ -45,7 +48,7 @@ class CavityGeometry:
     harmonic_amplitude2: float
     cavity_fraction: float
 
-    def __post_init__(self)->None:
+    def __post_init__(self) -> None:
         """Reject parameters that do not describe a valid cavity.
 
         Raises
@@ -82,10 +85,12 @@ def _cavity_boundary(theta: np.ndarray, geom: CavityGeometry) -> np.ndarray:
     numpy.ndarray
         Boundary radius in unit-cell lengths, same shape as theta.
     """
-    radius = np.sqrt(
-        geom.cavity_fraction
-        / (np.pi * (1 + 0.5 * (geom.harmonic_amplitude1 ** 2 + geom.harmonic_amplitude2 ** 2)))
+    # The harmonics add area of their own, so the unmodulated radius is
+    # corrected for them to hold cavity_fraction fixed
+    correction = 0.5 * (
+        geom.harmonic_amplitude1 ** 2 + geom.harmonic_amplitude2 ** 2
     )
+    radius = np.sqrt(geom.cavity_fraction / (np.pi * (1 + correction)))
 
     return radius * (
         1
@@ -122,13 +127,13 @@ def render_cell(
     if n_pixels <= 0:
         raise ValueError("n_pixels must be positive.")
 
-    # Pixel centres, spanning one unit cell in units of pixels.
+    # Pixel centers, spanning one unit cell in units of pixels
     coords = np.linspace(-n_pixels / 2 + 1 / 2.0, n_pixels / 2 - 1 / 2.0, n_pixels)
     y, x = np.ogrid[:n_pixels, :n_pixels]
     x = coords[x]
     y = coords[::-1][y]
 
-    # Compare each pixel against the boundary radius at its own angle.
+    # Compare each pixel against the boundary radius at its own angle
     r = np.hypot(x, y)
     theta = np.arctan2(x, y)
     r_boundary = n_pixels * _cavity_boundary(theta, geom)

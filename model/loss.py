@@ -30,11 +30,12 @@ class EigenvalueSupervisedLoss(nn.Module):
         One weight per band, applied to the elementwise loss.
     """
 
-    def __init__(self,
-                 frequency_scale: float = 1000.0,
-                 huber_beta: float = 1.0e-2,
-                 band_weights: Tensor | None = None
-    )->None:
+    def __init__(
+        self,
+        frequency_scale: float = 1000.0,
+        huber_beta: float = 1.0e-2,
+        band_weights: Tensor | None = None,
+    ) -> None:
         super().__init__()
 
         self.frequency_scale = float(frequency_scale)
@@ -48,10 +49,11 @@ class EigenvalueSupervisedLoss(nn.Module):
                 band_weights.detach().clone().float(),
             )
 
-    def forward(self,
-                predicted_eigenvalues: Tensor,
-                target_frequencies: Tensor,
-    )->Tensor:
+    def forward(
+        self,
+        predicted_eigenvalues: Tensor,
+        target_frequencies: Tensor,
+    ) -> Tensor:
         """Compute the elementwise weighted Smooth L1 loss.
 
         Parameters
@@ -71,7 +73,6 @@ class EigenvalueSupervisedLoss(nn.Module):
         ValueError
             If band_weights does not contain one value per band.
         """
-
         target_frequencies = target_frequencies.to(
             device=predicted_eigenvalues.device,
             dtype=predicted_eigenvalues.dtype,
@@ -104,4 +105,3 @@ class EigenvalueSupervisedLoss(nn.Module):
             element_loss = element_loss * weights
 
         return element_loss.mean()
-

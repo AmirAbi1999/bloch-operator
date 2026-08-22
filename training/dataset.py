@@ -72,12 +72,13 @@ class BlochDataset(Dataset):
         reads, or if no case owns a complete set of files.
     """
 
-    def __init__(self,
-                 path: str | Path,
-                 n_bands: int = 16,
-                 wave_columns: Sequence[str] = ("kx", "ky"),
-                 frequency_column: str = "Frequency (Hz)",
-    )->None:
+    def __init__(
+        self,
+        path: str | Path,
+        n_bands: int = 16,
+        wave_columns: Sequence[str] = ("kx", "ky"),
+        frequency_column: str = "Frequency (Hz)",
+    ) -> None:
         if not isinstance(n_bands, int) or n_bands < 1:
             raise ValueError(f"n_bands must be a positive integer, got {n_bands}.")
 
@@ -199,10 +200,7 @@ class BlochDataset(Dataset):
 
         return torch.from_numpy(np.column_stack(components).astype(np.float32))
 
-    def _load_frequency(self,
-                        case: int,
-                        n_wave: int,
-    ) -> Tensor:
+    def _load_frequency(self, case: int, n_wave: int) -> Tensor:
         """Read one case's band frequencies, grouped by wave vector.
 
         Parameters
@@ -249,10 +247,7 @@ class BlochDataset(Dataset):
         return torch.from_numpy(frequencies.astype(np.float32))
 
     @staticmethod
-    def _read_table(
-            path: Path,
-            required: Sequence[str],
-    ) -> pd.DataFrame:
+    def _read_table(path: Path, required: Sequence[str]) -> pd.DataFrame:
         """Read one dataset table and check the columns this class reads.
 
         Parameters
@@ -285,9 +280,7 @@ class BlochDataset(Dataset):
         return table
 
     @staticmethod
-    def _real(
-            value: Any,
-    ) -> float:
+    def _real(value: Any) -> float:
         """Return the real part of one frequency cell.
 
         Parameters
@@ -309,6 +302,7 @@ def make_dataloader(
     batch_size: int,
     shuffle: bool = False,
     num_workers: int = 0,
+    pin_memory: bool = False,
     **dataset_kwargs: Any,
 ) -> DataLoader:
     """Create a DataLoader for one dataset split.
@@ -323,6 +317,9 @@ def make_dataloader(
         Reshuffle the cases every epoch.
     num_workers : int
         Loader worker processes; 0 loads in the calling process.
+    pin_memory : bool
+        Stage batches in pinned memory, which a non-blocking copy to a
+        cuda device needs to overlap the transfer with compute.
     **dataset_kwargs
         Forwarded to BlochDataset.
 
@@ -338,4 +335,5 @@ def make_dataloader(
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
+        pin_memory=pin_memory,
     )

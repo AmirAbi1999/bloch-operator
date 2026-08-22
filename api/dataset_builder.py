@@ -32,7 +32,7 @@ import pandas as pd
 
 from utils import CavityGeometry, render_cell
 
-from .comsol_runner import ComsolRunner, ComsolTags
+from .comsol_runner import ComsolRunner, ComsolTags, SweepValues
 
 log = logging.getLogger(__name__)
 _worker_runner: ComsolRunner | None = None
@@ -142,7 +142,7 @@ def _init_worker(
 def _run_case(
     case: int,
     comsol_params: dict[str, str],
-    auxiliary_sweep: Mapping[str, Sequence[float] | np.ndarray] | None,
+    auxiliary_sweep: SweepValues | None,
 ) -> dict[str, Any]:
     """Run one geometry case using the worker-local runner.
 
@@ -253,21 +253,22 @@ class ComsolDatasetBuilder:
         columns are not numeric.
     """
 
-    def __init__(self,
-                 model_path: str | pathlib.Path,
-                 geometry_sweep: pd.DataFrame,
-                 auxiliary_sweep: pd.DataFrame | None = None,
-                 output_dir: str | pathlib.Path = "output",
-                 units: str | Sequence[str] | Mapping[str, str] = "[mm]",
-                 *,
-                 workers: int = 1,
-                 cores_per_client: int = 1,
-                 tags: ComsolTags = ComsolTags(),
-                 rebuild_geometry: bool = True,
-                 rebuild_mesh: bool = True,
-                 clear_results_table: bool = True,
-                 render_pixels: int | None = None,
-    )->None:
+    def __init__(
+        self,
+        model_path: str | pathlib.Path,
+        geometry_sweep: pd.DataFrame,
+        auxiliary_sweep: pd.DataFrame | None = None,
+        output_dir: str | pathlib.Path = "output",
+        units: str | Sequence[str] | Mapping[str, str] = "[mm]",
+        *,
+        workers: int = 1,
+        cores_per_client: int = 1,
+        tags: ComsolTags = ComsolTags(),
+        rebuild_geometry: bool = True,
+        rebuild_mesh: bool = True,
+        clear_results_table: bool = True,
+        render_pixels: int | None = None,
+    ) -> None:
         self.model_path: pathlib.Path = pathlib.Path(model_path).resolve()
         if not self.model_path.is_file():
             raise FileNotFoundError(f"COMSOL model not found: {self.model_path}")
@@ -314,8 +315,8 @@ class ComsolDatasetBuilder:
                 available_cores,
             )
 
-        self.units = self._normalise_units(units)
-        self.auxiliary_sweep = self._normalise_auxiliary_sweep(auxiliary_sweep)
+        self.units = self._normalize_units(units)
+        self.auxiliary_sweep = self._normalize_auxiliary_sweep(auxiliary_sweep)
         self.auxiliary_columns = self.auxiliary_sweep.columns.tolist()
         self.workers = workers
         self.cores_per_client = cores_per_client
@@ -414,10 +415,11 @@ class ComsolDatasetBuilder:
                 )
                 self._save_result(result, task["geometry_values"])
 
-        return self._finalise_log()
+        return self._finalize_log()
 
-    def _normalise_units(self,
-                         units: str | Sequence[str] | Mapping[str, str],
+    def _normalize_units(
+        self,
+        units: str | Sequence[str] | Mapping[str, str],
     ) -> list[str]:
         """Expand the units argument into one unit string per parameter.
 
@@ -461,8 +463,9 @@ class ComsolDatasetBuilder:
             )
         return unit_list
 
-    def _normalise_auxiliary_sweep(self,
-                                   auxiliary_sweep: pd.DataFrame | None,
+    def _normalize_auxiliary_sweep(
+        self,
+        auxiliary_sweep: pd.DataFrame | None,
     ) -> pd.DataFrame:
         """Index the compact per-case Auxiliary Sweep table by case.
 
@@ -498,9 +501,7 @@ class ComsolDatasetBuilder:
         return table.map(self._parse_sweep_values)
 
     @staticmethod
-    def _parse_sweep_values(
-            value: Any,
-    ) -> tuple[float, ...]:
+    def _parse_sweep_values(value: Any) -> tuple[float, ...]:
         """Parse one sweep cell into a numeric tuple.
 
         Parameters
@@ -584,9 +585,11 @@ class ComsolDatasetBuilder:
         dict[str, str]
             Parameter name to value string with its unit appended.
         """
+        values = geometry.to_numpy()
+
         return {
             name: f"{float(value):.10g} {unit}".strip()
-            for name, value, unit in zip(self.param_names, geometry.to_numpy(), self.units)
+            for name, value, unit in zip(self.param_names, values, self.units)
         }
 
     def _render_cases(self, tasks: list[dict[str, Any]]) -> None:
@@ -637,9 +640,10 @@ class ComsolDatasetBuilder:
         pd.DataFrame(columns=self.log_cols).to_csv(self.log_path, index=False)
         log.info("Simulation log -> %s", self.log_path)
 
-    def _save_result(self,
-                     result: dict[str, Any],
-                     geometry_values: Mapping[str, Any],
+    def _save_result(
+        self,
+        result: dict[str, Any],
+        geometry_values: Mapping[str, Any],
     ) -> None:
         """Write one case's response table and append its log row.
 
@@ -658,9 +662,10 @@ class ComsolDatasetBuilder:
 
         self._append_log(result, geometry_values)
 
-    def _append_log(self,
-                    result: dict[str, Any],
-                    geometry_values: Mapping[str, Any],
+    def _append_log(
+        self,
+        result: dict[str, Any],
+        geometry_values: Mapping[str, Any],
     ) -> None:
         """Append one row to the simulation log.
 
@@ -703,7 +708,7 @@ class ComsolDatasetBuilder:
         read_csv: Any = pd.read_csv
         return read_csv(path)
 
-    def _finalise_log(self) -> pd.DataFrame:
+    def _finalize_log(self) -> pd.DataFrame:
         """Sort the simulation log by case and rewrite it in place.
 
         Rows are appended in completion order, which is not case order once

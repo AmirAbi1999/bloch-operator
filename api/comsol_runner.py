@@ -14,6 +14,7 @@ pickled or shared, so each worker process must create, and close, its own
 runner.
 
 This module contains:
+    - SweepValues
     - ComsolTags
     - ComsolRunError
     - ComsolRunner
@@ -23,9 +24,9 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -34,6 +35,9 @@ if TYPE_CHECKING:
     import mph
 
 log = logging.getLogger(__name__)
+
+# Auxiliary Sweep inputs: one ordered value list per sweep input name
+SweepValues = Mapping[str, Sequence[float] | np.ndarray]
 
 
 @dataclass(frozen=True)
@@ -82,11 +86,12 @@ class ComsolRunError(RuntimeError):
         reporting.
     """
 
-    def __init__(self,
-                 step: str,
-                 message: str,
-                 params: Mapping[str, str] | None = None
-    )->None:
+    def __init__(
+        self,
+        step: str,
+        message: str,
+        params: Mapping[str, str] | None = None,
+    ) -> None:
         self.step = step
         self.params = dict(params) if params is not None else {}
         super().__init__(f"{step}: failed {message}")
@@ -122,15 +127,16 @@ class ComsolRunner:
         If any configured node tag is missing from the model.
     """
 
-    def __init__(self,
-                 mph_model: mph.Model,
-                 mph_client: mph.Client | None = None,
-                 tags: ComsolTags = ComsolTags(),
-                 *,
-                 rebuild_geometry: bool = True,
-                 rebuild_mesh: bool = True,
-                 clear_results_table: bool = True,
-    )->None:
+    def __init__(
+        self,
+        mph_model: mph.Model,
+        mph_client: mph.Client | None = None,
+        tags: ComsolTags = ComsolTags(),
+        *,
+        rebuild_geometry: bool = True,
+        rebuild_mesh: bool = True,
+        clear_results_table: bool = True,
+    ) -> None:
         if mph_model is None:
             raise ValueError("mph_model must be provided (loaded COMSOL model).")
 
@@ -147,9 +153,10 @@ class ComsolRunner:
 
         self._validate_model()
 
-    def __call__(self,
-                 params: Mapping[str, str],
-                 auxiliary_sweep: Mapping[str, Sequence[float] | np.ndarray] | None = None,
+    def __call__(
+        self,
+        params: Mapping[str, str],
+        auxiliary_sweep: SweepValues | None = None,
     ) -> pd.DataFrame:
         """Alias for run.
 
@@ -167,10 +174,11 @@ class ComsolRunner:
         """
         return self.run(params, auxiliary_sweep=auxiliary_sweep)
 
-    def run(self,
-            params: Mapping[str, str],
-            *,
-            auxiliary_sweep: Mapping[str, Sequence[float] | np.ndarray] | None = None,
+    def run(
+        self,
+        params: Mapping[str, str],
+        *,
+        auxiliary_sweep: SweepValues | None = None,
     ) -> pd.DataFrame:
         """Run the full pipeline and return the results table.
 
@@ -349,8 +357,8 @@ class ComsolRunner:
             ) from e
 
     def _set_auxiliary_sweep(
-            self,
-            auxiliary_sweep: Mapping[str, Sequence[float] | np.ndarray] | None = None,
+        self,
+        auxiliary_sweep: SweepValues | None = None,
     ) -> None:
         """Configure specified combinations for the Auxiliary Sweep.
 
