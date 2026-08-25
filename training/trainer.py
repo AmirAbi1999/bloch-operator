@@ -148,8 +148,8 @@ class Trainer:
             log.info(
                 "Epoch %3d/%d | train %.4e | val %.4e | val MAPE %6.2f%% | "
                 "lr %.2e | %.1fs%s",
-                epoch, epoch_range.stop - 1, row["train_loss"], row["val_loss"],
-                row["val_mape"], learning_rate, row["epoch_time_s"],
+                epoch, epoch_range.stop - 1, row["Train Loss"], row["Val Loss"],
+                row["Val MAPE (%)"], learning_rate, row["Time (s)"],
                 f" | {train['skipped']} skipped" if train["skipped"] else "",
             )
 
@@ -289,8 +289,8 @@ class Trainer:
                     acoustic = diagnostics["max_acoustic_eigenvalue"]
                     optical = diagnostics["min_first_optical_eigenvalue"]
                     gamma = {
-                        "gamma_acoustic": acoustic.item(),
-                        "gamma_optical": optical.item(),
+                        "Gamma acoustic": acoustic.item(),
+                        "Gamma optical": optical.item(),
                     }
 
         if not n_samples:
@@ -385,10 +385,11 @@ class Trainer:
     ) -> dict[str, float]:
         """Flatten one epoch into a row and append it to history.csv.
 
-        Every metric is prefixed by the split it came from, so mae reads as
-        train_mae and val_mae, and the Gamma-point diagnostics keep their
-        own names. Only the scalars go into the row; the per-band tensors
-        are written whole into the checkpoint instead.
+        Every metric is prefixed by the split it came from, so MAE (Hz)
+        reads as Train MAE (Hz) and Val MAE (Hz), and the Gamma-point
+        diagnostics keep their own names. Only the whole-split scalars go
+        into the row; the per-band tensors are written whole into the
+        checkpoint instead.
 
         Parameters
         ----------
@@ -407,18 +408,18 @@ class Trainer:
             The row as it was written.
         """
         row: dict[str, float] = {
-            "epoch": epoch,
-            "learning_rate": learning_rate,
-            "epoch_time_s": elapsed,
-            "train_loss": train["loss"],
-            "val_loss": validation["loss"],
-            "grad_norm": train["grad_norm"],
-            "skipped": train["skipped"],
+            "Epoch": epoch,
+            "Learning rate": learning_rate,
+            "Time (s)": elapsed,
+            "Train Loss": train["loss"],
+            "Val Loss": validation["loss"],
+            "Grad norm": train["grad_norm"],
+            "Skipped": train["skipped"],
         }
 
-        for prefix, result in (("train", train), ("val", validation)):
+        for prefix, result in (("Train", train), ("Val", validation)):
             row.update({
-                f"{prefix}_{name}": value
+                f"{prefix} {name}": value
                 for name, value in result["metrics"].items()
                 if isinstance(value, float)
             })

@@ -120,11 +120,14 @@ class MetricTracker:
         Returns
         -------
         dict[str, float | Tensor]
-            mae, rmse, mape, r2              float, over every band
-            per_band_mae, per_band_rmse      (N, )
-            per_band_mape, per_band_r2       (N, )
-            per_geometry_p90_mape            float, tails over the geometries
-            per_geometry_p95_mape            float
+            MAE (Hz), RMSE (Hz)             float, over every band
+            MAPE (%), R2                    float, over every band
+            Band MAE (Hz), Band RMSE (Hz)   (N, )
+            Band MAPE (%), Band R2          (N, )
+            P90 MAPE (%), P95 MAPE (%)      float, tails over the geometries
+
+            Every key is the header the metric is written under, so a
+            row or a column takes the name it came in with.
 
             A metric with nothing scored under it reads nan.
 
@@ -160,16 +163,16 @@ class MetricTracker:
         )
 
         return {
-            "mae": (absolute_sum.sum() / n_values).item(),
-            "rmse": (squared_sum.sum() / n_values).sqrt().item(),
-            "mape": (percentage_sum.sum() / scored_count.sum()).item(),
-            "r2": self.r_squared(squared_sum.sum(), deviation).item(),
-            "per_band_mae": absolute_sum.sum(0) / n_per_band,
-            "per_band_rmse": (squared_sum.sum(0) / n_per_band).sqrt(),
-            "per_band_mape": percentage_sum.sum(0) / scored_count.sum(0),
-            "per_band_r2": self.r_squared(squared_sum.sum(0), band_deviation),
-            "per_geometry_p90_mape": geometry_p90_mape,
-            "per_geometry_p95_mape": geometry_p95_mape,
+            "MAE (Hz)": (absolute_sum.sum() / n_values).item(),
+            "RMSE (Hz)": (squared_sum.sum() / n_values).sqrt().item(),
+            "MAPE (%)": (percentage_sum.sum() / scored_count.sum()).item(),
+            "R2": self.r_squared(squared_sum.sum(), deviation).item(),
+            "Band MAE (Hz)": absolute_sum.sum(0) / n_per_band,
+            "Band RMSE (Hz)": (squared_sum.sum(0) / n_per_band).sqrt(),
+            "Band MAPE (%)": percentage_sum.sum(0) / scored_count.sum(0),
+            "Band R2": self.r_squared(squared_sum.sum(0), band_deviation),
+            "P90 MAPE (%)": geometry_p90_mape,
+            "P95 MAPE (%)": geometry_p95_mape,
         }
 
     @staticmethod
