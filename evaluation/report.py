@@ -55,7 +55,7 @@ def save_evaluation_report(
         its per-band entries to their own table, so a loss can be passed
         in beside them.
     predictions, targets : Tensor
-        Frequencies in hertz, each (B, K, N).
+        Frequencies in hertz, each (B, K, n_bands).
     wave_vectors : Tensor
         Wave vectors the split was scored on, (B, K, 2).
     case_ids : sequence of int
@@ -88,14 +88,14 @@ def save_evaluation_report(
     wave_vectors = wave_vectors.cpu()
     error = predicted - target
 
-    n_geometries, n_wave, n_bands = predicted.shape
+    n_geometries, n_wave_vectors, n_bands = predicted.shape
 
     # The counts and the floor travel beside the scalars: a MAPE cannot
     # be read against another run without the floor it dropped bands at
     scalars = _scalar_metrics({
         **metrics,
         "Geometries": n_geometries,
-        "Wave vectors": n_wave,
+        "Wave vectors": n_wave_vectors,
         "Bands": n_bands,
         "Relative floor (Hz)": relative_floor,
     })
@@ -208,7 +208,8 @@ def _per_geometry_table(
     Parameters
     ----------
     error, target : Tensor
-        Signed error and the targets it was taken against, each (B, K, N).
+        Signed error and the targets it was taken against, each
+        (B, K, n_bands).
     case_ids : sequence of int
         Case id of each geometry, in split order.
     relative_floor : float
@@ -257,7 +258,7 @@ def _write_case_tables(
     Parameters
     ----------
     predicted, target : Tensor
-        Frequencies in hertz, each (B, K, N).
+        Frequencies in hertz, each (B, K, n_bands).
     wave_vectors : Tensor
         Wave vectors the split was scored on, (B, K, 2).
     case_ids : sequence of int
@@ -268,11 +269,11 @@ def _write_case_tables(
         Smallest target frequency, in hertz, carrying a relative error.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    n_wave, n_bands = predicted.shape[1:]
+    n_wave_vectors, n_bands = predicted.shape[1:]
 
     # Rows run wave vector by wave vector, the modes of one wave vector
     # together, the order assign_band_index reads them back in
-    modes = torch.arange(1, n_bands + 1).repeat(n_wave)
+    modes = torch.arange(1, n_bands + 1).repeat(n_wave_vectors)
 
     for position, case in enumerate(case_ids):
         points = wave_vectors[position]
@@ -336,7 +337,7 @@ def _validate_layout(
     Parameters
     ----------
     predictions, targets : Tensor
-        Frequencies in hertz, each expected to be (B, K, N).
+        Frequencies in hertz, each expected to be (B, K, n_bands).
     wave_vectors : Tensor
         Wave vectors, expected to be (B, K, 2).
     case_ids : sequence of int
@@ -346,7 +347,7 @@ def _validate_layout(
     ------
     ValueError
         If the predictions still require gradients, if the two frequency
-        tensors do not share one shape (B, K, N), if the wave vectors do
+        tensors do not share one shape (B, K, n_bands), if the wave vectors do
         not stand beside them, or if the case ids do not count the
         geometries.
     """
@@ -354,7 +355,7 @@ def _validate_layout(
         raise ValueError("Detach predictions before writing a report.")
     if predictions.ndim != 3 or predictions.shape != targets.shape:
         raise ValueError(
-            "predictions and targets must share one shape (B, K, N); "
+            "predictions and targets must share one shape (B, K, n_bands); "
             f"received {tuple(predictions.shape)} and {tuple(targets.shape)}."
         )
     if wave_vectors.shape != (*predictions.shape[:2], 2):

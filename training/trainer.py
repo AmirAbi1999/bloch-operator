@@ -41,7 +41,8 @@ class Trainer:
     call, so the same trainer scores whichever split it is handed.
 
     The loss reads the model's eigenvalues and the metrics its frequencies.
-    Both are (B, K, N), so swapping them raises nothing and trains nothing.
+    Both are (B, K, n_bands), so swapping them raises nothing and trains
+    nothing.
     A batch whose loss or gradient norm is not finite is skipped and counted.
 
     Parameters
@@ -146,8 +147,8 @@ class Trainer:
             history.append(row)
 
             log.info(
-                "Epoch %3d/%d | train %.4e | val %.4e | val MAPE %6.2f%% | "
-                "lr %.2e | %.1fs%s",
+                "Epoch %3d/%d | Train %.4e | Val %.4e | Val MAPE %6.2f%% | "
+                "LR %.2e | %.1fs%s",
                 epoch, epoch_range.stop - 1, row["Train Loss"], row["Val Loss"],
                 row["Val MAPE (%)"], learning_rate, row["Time (s)"],
                 f" | {train['skipped']} skipped" if train["skipped"] else "",

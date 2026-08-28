@@ -59,9 +59,9 @@ class EigenvalueSupervisedLoss(nn.Module):
         Parameters
         ----------
         predicted_eigenvalues : Tensor
-            Predicted eigenvalues, shape [..., n_bands].
+            Predicted eigenvalues, shape (..., n_bands).
         target_frequencies : Tensor
-            Target frequencies in hertz, shape [..., n_bands].
+            Target frequencies, shape (..., n_bands).
 
         Returns
         -------

@@ -14,21 +14,21 @@ def d4_orbit(wave_vectors: Tensor) -> Tensor:
     Parameters
     ----------
     wave_vectors : Tensor
-        Wave vectors with shape [..., 2].
+        Wave vectors with shape (..., 2).
 
     Returns
     -------
     Tensor
-        Wave-vector orbit with shape [..., 8, 2].
+        Wave-vector orbit with shape (..., 8, 2).
 
     Raises
     ------
     ValueError
-        If wave_vectors does not have shape [..., 2].
+        If wave_vectors does not have shape (..., 2).
     """
     if wave_vectors.ndim < 1 or wave_vectors.shape[-1] != 2:
         raise ValueError(
-            "wave_vectors must have shape [..., 2]; "
+            "wave_vectors must have shape (..., 2); "
             f"received {tuple(wave_vectors.shape)}."
         )
     qx = wave_vectors[..., 0]
@@ -58,14 +58,14 @@ def random_d4_transform(
     Parameters
     ----------
     wave_vectors : Tensor
-        Wave vectors with shape [..., 2].
+        Wave vectors with shape (..., 2).
     generator : torch.Generator, optional
         Generator driving the transform selection.
 
     Returns
     -------
     Tensor
-        Transformed wave vectors with shape [..., 2].
+        Transformed wave vectors with shape (..., 2).
     """
     orbit = d4_orbit(wave_vectors)
     index_shape = wave_vectors.shape[:-1]
@@ -99,14 +99,14 @@ def gamma_diagnostics(
     model : BlochOperator
         Model evaluated at Gamma.
     images : Tensor
-        Geometry images with shape [B, C, H, W].
+        Geometry images with shape (B, C, H, W).
     tolerance : float
         Largest acoustic eigenvalue still counted as zero.
 
     Returns
     -------
     dict[str, Tensor]
-        gamma_eigenvalues, shape [B, n_bands]; max_acoustic_eigenvalue,
+        gamma_eigenvalues, shape (B, n_bands); max_acoustic_eigenvalue,
         min_first_optical_eigenvalue and acoustic_constraint_passed, each
         a scalar.
 

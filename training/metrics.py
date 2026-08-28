@@ -1,10 +1,11 @@
 """Evaluation Metrics for bloch-operator frequency prediction.
 
-Expected tensor shape:
-    predictions : (B, K, N)
-    targets     : (B, K, N)
+Expected tensor shape::
 
-B = geometries, K = wave vectors, N = Frequency bands.
+    predictions : (B, K, n_bands)
+    targets     : (B, K, n_bands)
+
+B geometries in a batch, K wave vectors, n_bands bands retained of each.
 
 Usage
 -----
@@ -76,15 +77,15 @@ class MetricTracker:
         Parameters
         ----------
         predicted : Tensor
-            Predicted frequencies in hertz, shape (B, K, N).
+            Predicted frequencies in hertz, shape (B, K, n_bands).
         target : Tensor
-            Target frequencies in hertz, shape (B, K, N).
+            Target frequencies in hertz, shape (B, K, n_bands).
 
         Raises
         ------
         ValueError
             If the predictions still require gradients, or if the two
-            tensors do not share one shape (B, K, N).
+            tensors do not share one shape (B, K, n_bands).
         """
         self._validate(predicted, target)
 
@@ -122,8 +123,8 @@ class MetricTracker:
         dict[str, float | Tensor]
             MAE (Hz), RMSE (Hz)             float, over every band
             MAPE (%), R2                    float, over every band
-            Band MAE (Hz), Band RMSE (Hz)   (N, )
-            Band MAPE (%), Band R2          (N, )
+            Band MAE (Hz), Band RMSE (Hz)   (n_bands,)
+            Band MAPE (%), Band R2          (n_bands,)
             P90 MAPE (%), P95 MAPE (%)      float, tails over the geometries
 
             Every key is the header the metric is written under, so a
@@ -190,12 +191,12 @@ class MetricTracker:
         ------
         ValueError
             If the predictions still require gradients, or if the two
-            tensors do not share one shape (B, K, N).
+            tensors do not share one shape (B, K, n_bands).
         """
         if predicted.requires_grad:
             raise ValueError("Detach predictions before updating metrics.")
         if predicted.ndim != 3 or predicted.shape != target.shape:
             raise ValueError(
-                "predictions and targets must share one shape (B, K, N); "
+                "predictions and targets must share one shape (B, K, n_bands); "
                 f"received {tuple(predicted.shape)} and {tuple(target.shape)}."
             )

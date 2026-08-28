@@ -100,8 +100,8 @@ def evaluate(
     dict[str, Any]
         metrics               the MetricTracker result
         loss                  sample-weighted mean, given a criterion
-        predictions, targets  (N, K, n_bands) in hertz, when collected
-        wave_vectors          (N, K, 2), when collected
+        predictions, targets  (n_geometries, K, n_bands) in hertz, collected
+        wave_vectors          (n_geometries, K, 2), when collected
 
     Raises
     ------

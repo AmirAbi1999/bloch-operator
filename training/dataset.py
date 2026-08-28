@@ -200,20 +200,20 @@ class BlochDataset(Dataset):
 
         return torch.from_numpy(np.column_stack(components).astype(np.float32))
 
-    def _load_frequency(self, case: int, n_wave: int) -> Tensor:
+    def _load_frequency(self, case: int, n_wave_vectors: int) -> Tensor:
         """Read one case's band frequencies, grouped by wave vector.
 
         Parameters
         ----------
         case : int
             Case id.
-        n_wave : int
-            Wave vectors solved for this case, one row group each.
+        n_wave_vectors : int
+            Wave vectors K solved for this case, one row group each.
 
         Returns
         -------
         Tensor
-            Frequencies in hertz with shape (n_wave, n_bands).
+            Frequencies in hertz with shape (K, n_bands).
 
         Raises
         ------
@@ -229,12 +229,12 @@ class BlochDataset(Dataset):
             raise ValueError(f"{path.name} has no '{self.frequency_column}' column.")
 
         frequencies = data[self.frequency_column].map(self._real).to_numpy()
-        n_solved, remainder = divmod(frequencies.size, n_wave)
+        n_solved, remainder = divmod(frequencies.size, n_wave_vectors)
 
         if remainder:
             raise ValueError(
                 f"{path.name} holds {frequencies.size} rows, which is not a "
-                f"whole number of bands for {n_wave} wave vectors."
+                f"whole number of bands for {n_wave_vectors} wave vectors."
             )
         if n_solved < self.n_bands:
             raise ValueError(
@@ -242,7 +242,7 @@ class BlochDataset(Dataset):
                 f"than the requested n_bands={self.n_bands}."
             )
 
-        frequencies = frequencies.reshape(n_wave, n_solved)[:, :self.n_bands]
+        frequencies = frequencies.reshape(n_wave_vectors, n_solved)[:, :self.n_bands]
 
         return torch.from_numpy(frequencies.astype(np.float32))
 

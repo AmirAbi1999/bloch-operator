@@ -17,6 +17,10 @@ For a connected, traction-free 2D solid unit cell with periodicity only in
 x and y, there are two acoustic zero modes at Gamma. G0 is therefore
 parameterized to have exactly a two-dimensional right nullspace.
 
+Shapes are written as (B, C, H, W) throughout the project: B geometries in
+a batch, C channels of an H by W image, K wave vectors, r the side length
+of the operator matrices, and n_bands the bands retained of them.
+
 This module contains:
     - ConvBlock
     - GeometryEncoder
@@ -174,7 +178,7 @@ class MatrixHead(nn.Module):
         Returns
         -------
         Tensor
-            Matrices with shape (B, matrix_dim, matrix_dim).
+            Matrices with shape (B, r, r).
         """
         batch_size = latent.shape[0]
         matrix = self.linear(latent)
@@ -226,7 +230,7 @@ class AcousticNullHead(nn.Module):
         Returns
         -------
         Tensor
-            G0 with shape (B, matrix_dim, matrix_dim).
+            G0 with shape (B, r, r).
         """
         batch_size = latent.shape[0]
 
@@ -356,7 +360,7 @@ class BlochOperator(nn.Module):
         -------
         dict[str, Tensor]
             latent, shape (B, latent_dim); G0, Gx and Gy, each with shape
-            (B, matrix_dim, matrix_dim).
+            (B, r, r).
         """
         latent = self.encoder(images)
         return {
@@ -420,19 +424,19 @@ class BlochOperator(nn.Module):
         Parameters
         ----------
         images : Tensor
-            Geometry images, shape (batch, channels, height, width).
+            Geometry images, shape (B, C, H, W).
         wave_vectors : Tensor
-            Nondimensional wave vectors, shape (p, 2) or (batch, p, 2).
+            Nondimensional wave vectors, shape (K, 2) or (B, K, 2).
 
         Returns
         -------
         dict[str, Tensor]
-            latent          (batch, latent_dim)
-            G0, Gx, Gy      (batch, r, r)
-            H               (batch, p, r, r), complex
-            D               (batch, p, r, r), complex Hermitian PSD
-            eigenvalues     (batch, p, n_bands)
-            frequencies     (batch, p, n_bands)
+            latent          (B, latent_dim)
+            G0, Gx, Gy      (B, r, r)
+            H               (B, K, r, r), complex
+            D               (B, K, r, r), complex Hermitian PSD
+            eigenvalues     (B, K, n_bands)
+            frequencies     (B, K, n_bands), in hertz
         """
         batch_size = images.size(0)
         wave_vectors = self.prepare_wavevectors(wave_vectors, batch_size)
