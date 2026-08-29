@@ -19,14 +19,20 @@ import torch
 from torch import Tensor, nn
 from torch.utils.data import DataLoader
 
+from baseline import CNNBaseline, CNNBaselineConfig
 from model.bloch_operator import BlochOperator, BlochOperatorConfig
 from training.metrics import MetricTracker
+
+MODELS = {
+    "BlochOperator": (BlochOperator, BlochOperatorConfig),
+    "CNNBaseline": (CNNBaseline, CNNBaselineConfig),
+}
 
 
 def load_checkpoint(
     path: str | Path,
     device: str | torch.device = "cpu",
-) -> BlochOperator:
+) -> nn.Module:
     """Rebuild a trained model from a checkpoint.
 
     Parameters
@@ -38,22 +44,24 @@ def load_checkpoint(
 
     Returns
     -------
-    model.BlochOperator
-        Model in eval mode, shaped by the config the checkpoint stores.
-        Take n_bands and frequency_scale from model.config, not from a
-        TrainingConfig: the two need not describe the same run.
+    torch.nn.Module
+        Model in eval mode, of the class the checkpoint names and the
+        shape it stores. Take n_bands and frequency_scale from
+        model.config, not from a TrainingConfig: the two need not
+        describe the same run.
 
     Raises
     ------
     KeyError
-        If the checkpoint records no model config or no weights.
+        If the checkpoint records no model name, config or weights, or
+        names a model that is not one of MODELS.
     """
     device = torch.device(device)
     state = torch.load(path, map_location=device, weights_only=False)
 
     missing = [
         key
-        for key in ("model_config", "model_state_dict")
+        for key in ("model_name", "model_config", "model_state_dict")
         if key not in state
     ]
     if missing:
@@ -61,14 +69,22 @@ def load_checkpoint(
             f"Checkpoint {Path(path).name} is missing: {', '.join(missing)}."
         )
 
-    model = BlochOperator(BlochOperatorConfig(**state["model_config"]))
+    name = state["model_name"]
+    if name not in MODELS:
+        raise KeyError(
+            f"Checkpoint {Path(path).name} holds a {name}, "
+            f"which is none of: {', '.join(MODELS)}."
+        )
+
+    model_class, config_class = MODELS[name]
+    model = model_class(config_class(**state["model_config"]))
     model.load_state_dict(state["model_state_dict"])
 
     return model.to(device).eval()
 
 
 def evaluate(
-    model: BlochOperator,
+    model: nn.Module,
     loader: DataLoader,
     device: str | torch.device = "cpu",
     *,
@@ -80,8 +96,9 @@ def evaluate(
 
     Parameters
     ----------
-    model : model.BlochOperator
-        Model returning the frequencies of one batch.
+    model : torch.nn.Module
+        Model called as model(images, wave_vectors), returning the
+        frequencies of one batch.
     loader : torch.utils.data.DataLoader
         Loader yielding image, wave-vector and frequency batches.
     device : str or torch.device

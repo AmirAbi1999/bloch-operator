@@ -32,7 +32,7 @@ class EigenvalueSupervisedLoss(nn.Module):
 
     def __init__(
         self,
-        frequency_scale: float = 1000.0,
+        frequency_scale: float = 40_000.0,
         huber_beta: float = 1.0e-2,
         band_weights: Tensor | None = None,
     ) -> None:

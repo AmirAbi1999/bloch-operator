@@ -24,7 +24,6 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 from torch.utils.data import DataLoader
 
-from model.bloch_operator import BlochOperator
 from model.utils import d4_orbit, gamma_diagnostics
 
 from .metrics import MetricTracker
@@ -47,8 +46,9 @@ class Trainer:
 
     Parameters
     ----------
-    model : model.BlochOperator
-        Model returning the eigenvalues and frequencies of one batch.
+    model : torch.nn.Module
+        Model called as model(images, wave_vectors), returning the
+        eigenvalues and frequencies of one batch.
     criterion : torch.nn.Module
         Loss called as criterion(eigenvalues, target_frequencies).
     optimizer : torch.optim.Optimizer
@@ -63,6 +63,10 @@ class Trainer:
     d4_augmentation : bool
         Supervise every wave vector on its whole D4 orbit, at eight times
         the eigenproblems per batch.
+    gamma_check : bool
+        Score the acoustic constraint on the first validation batch. The
+        diagnostic builds a Gamma of its own and reads the model there,
+        which only a model over wave vectors answers.
     patience : int, optional
         Epochs without a lower validation loss before the run stops.
     output_dir : str or pathlib.Path
@@ -71,7 +75,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: BlochOperator,
+        model: nn.Module,
         criterion: nn.Module,
         optimizer: Optimizer,
         device: str | torch.device = "cpu",
@@ -79,16 +83,18 @@ class Trainer:
         scheduler: LRScheduler | None = None,
         grad_clip: float | None = 1.0,
         d4_augmentation: bool = True,
+        gamma_check: bool = True,
         patience: int | None = None,
         output_dir: str | Path = "runs",
     ) -> None:
         self.device = torch.device(device)
-        self.model: BlochOperator = model.to(self.device)
+        self.model = model.to(self.device)
         self.criterion = criterion.to(self.device)
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.grad_clip = float("inf") if grad_clip is None else grad_clip
         self.d4_augmentation = d4_augmentation
+        self.gamma_check = gamma_check
         self.patience = patience
 
         self.output_dir: Path = Path(output_dir)
@@ -285,7 +291,7 @@ class Trainer:
                 n_samples += images.shape[0]
                 tracker.update(output["frequencies"], targets)
 
-                if not index:
+                if not index and self.gamma_check:
                     diagnostics = gamma_diagnostics(self.model, images)
                     acoustic = diagnostics["max_acoustic_eigenvalue"]
                     optical = diagnostics["min_first_optical_eigenvalue"]
@@ -338,11 +344,12 @@ class Trainer:
         if self.scheduler is not None:
             state["scheduler_state_dict"] = self.scheduler.state_dict()
 
-        # The BlochOperatorConfig the model was built from, flattened to a
-        # dict: it records the operator_dim, n_bands and frequency_scale the
-        # weights above assume, so a checkpoint found on its own still says
-        # what shape of model to load it back into.
-        state["model_config"] = asdict(self.model.config)
+        # The config the model was built from, flattened to a dict beside
+        # the model's own name, so a checkpoint found on its own says both
+        # what class to load it back into and what shape to give it
+        config: Any = self.model.config
+        state["model_name"] = type(self.model).__name__
+        state["model_config"] = asdict(config)
 
         path = self.output_dir / filename
         torch.save(state, path)

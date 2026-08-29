@@ -27,8 +27,9 @@ from torch.optim.lr_scheduler import (
 )
 from torch.utils.data import DataLoader
 
+from baseline import CNNBaseline
 from config import OptimConfig, TrainingConfig, set_seed
-from model import BlochOperator, EigenvalueSupervisedLoss
+from model import BlochOperator, BlochOperatorConfig, EigenvalueSupervisedLoss
 from training import Trainer, make_dataloader
 
 log = logging.getLogger(__name__)
@@ -109,7 +110,9 @@ def build_trainer(config: TrainingConfig) -> Trainer:
         Trainer ready to fit, resumed from runtime.resume when it is set.
     """
     optim = config.optim
-    model = BlochOperator(config.model)
+    operator = isinstance(config.model, BlochOperatorConfig)
+    model = BlochOperator(config.model) if operator else CNNBaseline(config.model)
+
     optimizer = AdamW(
         model.parameters(),
         lr=optim.learning_rate,
@@ -129,7 +132,10 @@ def build_trainer(config: TrainingConfig) -> Trainer:
         resolve_device(config.runtime.device),
         scheduler=build_scheduler(optimizer, optim),
         grad_clip=optim.grad_clip,
-        d4_augmentation=config.data.d4_augmentation,
+        # Only the operator reads the wave vectors, so only it can be
+        # supervised on their orbit or answered at a Gamma of its own
+        d4_augmentation=config.data.d4_augmentation and operator,
+        gamma_check=operator,
         patience=optim.patience,
         output_dir=config.runtime.output_dir,
     )

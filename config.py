@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from baseline import CNNBaselineConfig
 from model import BlochOperatorConfig
 
 ROOT = Path(__file__).resolve().parent
@@ -142,12 +143,8 @@ class TrainingConfig:
     """One training run, described as data."""
 
     data: DataConfig = field(default_factory=DataConfig)
-    model: BlochOperatorConfig = field(
-        default_factory=lambda: BlochOperatorConfig(
-            n_bands=6,
-            operator_dim=12,
-            frequency_scale=40_000.0,
-        )
+    model: BlochOperatorConfig | CNNBaselineConfig = field(
+        default_factory=BlochOperatorConfig
     )
     loss: LossConfig = field(default_factory=LossConfig)
     optim: OptimConfig = field(default_factory=OptimConfig)

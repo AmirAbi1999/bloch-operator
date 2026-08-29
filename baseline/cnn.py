@@ -93,13 +93,16 @@ class CNNBaseline(nn.Module):
         mask[0, :config.n_acoustic_modes] = 0.0
         self.register_buffer("acoustic_mask", mask)
 
-    def forward(self, images: Tensor) -> dict[str, Tensor]:
+    def forward(self, images: Tensor, wave_vectors: Tensor) -> dict[str, Tensor]:
         """Predict the bands of every wave vector in the sweep.
 
         Parameters
         ----------
         images : Tensor
             Geometry images, shape (B, C, H, W).
+        wave_vectors : Tensor
+            Wave vectors of the batch, shape (B, K, 2), checked for their
+            count and read no further
 
         Returns
         -------
@@ -107,7 +110,19 @@ class CNNBaseline(nn.Module):
             latent          (B, latent_dim)
             eigenvalues     (B, K, n_bands)
             frequencies     (B, K, n_bands), in hertz
+
+        Raises
+        ------
+        ValueError
+            If the batch carries another sweep than the head emits.
         """
+
+        if wave_vectors.shape[1] != self.config.n_wave_vectors:
+            raise ValueError(
+                f"The baseline emits one fixed sweep of {self.config.n_wave_vectors} wave "
+                f"vectors; this batch carries {wave_vectors.shape[1]}."
+            )
+
         latent = self.encoder(images)
 
         normalized = self.acoustic_mask * self.head(latent).reshape(

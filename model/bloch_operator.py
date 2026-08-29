@@ -263,6 +263,8 @@ class BlochOperatorConfig:
         Channels in the geometry image.
     latent_dim : int
         Width of the latent geometry vector.
+    widths : tuple[int, ...]
+        Channel width of each stride-2 ConvBlock stage of the encoder.
     operator_dim : int
         Side length r of the operator matrices G0, Gx and Gy.
     n_bands : int
@@ -278,10 +280,11 @@ class BlochOperatorConfig:
 
     in_channels: int = 1
     latent_dim: int = 256
+    widths: tuple[int, ...] = (32, 64, 128, 256)
     operator_dim: int = 12
     n_bands: int = 6
     n_acoustic_modes: int = 2
-    frequency_scale: float = 1000.0
+    frequency_scale: float = 40_000.0
     use_float64: bool = True
 
 
@@ -325,6 +328,7 @@ class BlochOperator(nn.Module):
         self.encoder = GeometryEncoder(
             in_channels=config.in_channels,
             latent_dim=config.latent_dim,
+            widths=config.widths,
         )
 
         self.g0 = AcousticNullHead(
