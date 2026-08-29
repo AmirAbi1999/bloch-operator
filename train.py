@@ -9,12 +9,19 @@ This module contains:
     - build_scheduler
     - build_trainer
     - build_loader
+    - git_commit
+    - save_run_config
     - main
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import subprocess
+from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
 
 import torch
 from torch.optim import AdamW, Optimizer
@@ -173,6 +180,67 @@ def build_loader(config: TrainingConfig, split: str) -> DataLoader:
     )
 
 
+def git_commit() -> str | None:
+    """Name the commit the run was launched from, dirty tree included.
+
+    Returns
+    -------
+    str or None
+        Commit description, or None outside a repository.
+    """
+    try:
+        head = subprocess.run(
+            ("git", "describe", "--always", "--dirty"),
+            cwd=Path(__file__).resolve().parent,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+    return head.stdout.strip()
+
+
+def save_run_config(config: TrainingConfig, trainer: Trainer) -> Path:
+    """Write the whole run configuration beside its history and checkpoints.
+
+    Returns
+    -------
+    pathlib.Path
+        The file that was written.
+    """
+    # Spelled out, since the torch stub declares no __str__ for a device
+    device = trainer.device
+    resolved = device.type if device.index is None else f"{device.type}:{device.index}"
+
+    record = {
+        "model": {"name": type(trainer.model).__name__, **asdict(config.model)},
+        "data": asdict(config.data),
+        "loss": asdict(config.loss),
+        "optim": asdict(config.optim),
+        "runtime": asdict(config.runtime),
+        "run": {
+            "started": datetime.now().isoformat(timespec="seconds"),
+            "device": resolved,
+            "d4_augmentation": trainer.d4_augmentation,
+            "gamma_check": trainer.gamma_check,
+            "parameters": sum(p.numel() for p in trainer.model.parameters()),
+            "torch": torch.__version__,
+            "cuda": torch.version.cuda,
+            "commit": git_commit(),
+        },
+    }
+
+    path = trainer.output_dir / "config.json"
+    # Paths are the only member JSON cannot carry on its own
+    path.write_text(
+        json.dumps(record, indent=2, default=str) + "\n", encoding="utf-8",
+    )
+
+    return path
+
+
 def main() -> None:
     """Seed one run, open the two splits, and fit."""
     logging.basicConfig(
@@ -187,6 +255,9 @@ def main() -> None:
              resolve_device(config.runtime.device), config.runtime.output_dir)
 
     trainer = build_trainer(config)
+
+    save_run_config(config, trainer)
+
     trainer.fit(
         build_loader(config, "train"),
         build_loader(config, "val"),

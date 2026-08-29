@@ -87,7 +87,7 @@ class Trainer:
         patience: int | None = None,
         output_dir: str | Path = "runs",
     ) -> None:
-        self.device = torch.device(device)
+        self.device: torch.device = torch.device(device)
         self.model = model.to(self.device)
         self.criterion = criterion.to(self.device)
         self.optimizer = optimizer
