@@ -42,7 +42,6 @@ def save_evaluation_report(
     case_ids: Sequence[int],
     output_dir: str | Path,
     *,
-    relative_floor: float = 1.0,
     n_worst_cases: int | None = 20,
 ) -> None:
     """Write every table of one evaluation into a single directory.
@@ -50,10 +49,10 @@ def save_evaluation_report(
     Parameters
     ----------
     metrics : dict[str, Any]
-        MetricTracker result from evaluate, already keyed by the header
-        each metric is written under. Its scalars go to metrics.json and
-        its per-band entries to their own table, so a loss can be passed
-        in beside them.
+        Result from evaluate, already keyed by the header each metric is
+        written under. Its scalars go to metrics.json and its per-band
+        entries to their own table, so a loss can be passed in beside
+        them.
     predictions, targets : Tensor
         Frequencies in hertz, each (B, K, n_bands).
     wave_vectors : Tensor
@@ -62,10 +61,6 @@ def save_evaluation_report(
         Case id of each geometry, in split order.
     output_dir : str or pathlib.Path
         Root of the layout in the module docstring.
-    relative_floor : float
-        Smallest target frequency, in hertz, carrying a relative error.
-        Pass the floor the metrics were tracked under, or the tables
-        disagree with metrics.json.
     n_worst_cases : int, optional
         Cases written to cases/, the worst by MAPE. None writes one file
         per geometry.
@@ -73,12 +68,20 @@ def save_evaluation_report(
     Raises
     ------
     KeyError
-        If a whole-split or per-band metric is absent.
+        If the relative floor, or a whole-split or per-band metric, is
+        absent.
     ValueError
         If the tensors do not share the layout above, if the case ids do
         not count the geometries, or if the predictions carry gradients.
     """
     _validate_layout(predictions, targets, wave_vectors, case_ids)
+
+    if "Relative floor (Hz)" not in metrics:
+        raise KeyError(
+            "metrics carries no Relative floor (Hz); pass the result of "
+            "evaluate, which records the floor it scored under."
+        )
+    relative_floor = float(metrics["Relative floor (Hz)"])
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -90,14 +93,11 @@ def save_evaluation_report(
 
     n_geometries, n_wave_vectors, n_bands = predicted.shape
 
-    # The counts and the floor travel beside the scalars: a MAPE cannot
-    # be read against another run without the floor it dropped bands at
     scalars = _scalar_metrics({
         **metrics,
         "Geometries": n_geometries,
         "Wave vectors": n_wave_vectors,
         "Bands": n_bands,
-        "Relative floor (Hz)": relative_floor,
     })
     (output_dir / "metrics.json").write_text(
         json.dumps(scalars, indent=2) + "\n", encoding="utf-8",

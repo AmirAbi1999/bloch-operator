@@ -67,11 +67,16 @@ class LossConfig:
     huber_beta : float
         Transition between the quadratic and the linear region of the
         loss, in log-eigenvalue units.
+    log_offset : float
+        Added to both sides before the log, in lambda units. It is the
+        frequency below which the loss stops measuring relative error and
+        starts measuring absolute: 1.56e-4 is 500 Hz at a scale of 40 000.
     band_weights : tuple[float, ...], optional
         One weight per retained band, or None to weight them equally.
     """
 
-    huber_beta: float = 1.0e-2
+    huber_beta: float = 2.0e-2
+    log_offset: float = 1.56e-4
     band_weights: tuple[float, ...] | None = None
 
 

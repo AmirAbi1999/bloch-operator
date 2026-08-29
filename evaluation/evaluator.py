@@ -115,7 +115,7 @@ def evaluate(
     Returns
     -------
     dict[str, Any]
-        metrics               the MetricTracker result
+        metrics               the MetricTracker result, and the relative floor
         loss                  sample-weighted mean, given a criterion
         predictions, targets  (n_geometries, K, n_bands) in hertz, collected
         wave_vectors          (n_geometries, K, 2), when collected
@@ -164,7 +164,10 @@ def evaluate(
                 target_batches.append(targets.cpu())
                 wave_vector_batches.append(wave_vectors.cpu())
 
-    result: dict[str, Any] = {"metrics": tracker.compute()}
+    metrics = tracker.compute()
+    metrics["Relative floor (Hz)"] = relative_floor
+
+    result: dict[str, Any] = {"metrics": metrics}
 
     if criterion is not None:
         result["loss"] = loss_sum / n_samples

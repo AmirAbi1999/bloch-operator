@@ -2,7 +2,7 @@
 
 Smooth L1 loss between the predicted eigenvalues and the target frequencies
 carried to the same scale, lambda = (f / frequency_scale)^2, with both sides
-taken under log1p and an optional weight per band.
+taken under log(lambda + log_offset) and an optional weight per band.
 
 This module contains:
     - EigenvalueSupervisedLoss
@@ -25,7 +25,11 @@ class EigenvalueSupervisedLoss(nn.Module):
         frequencies to eigenvalues.
     huber_beta : float
         Transition point between the quadratic and linear regions of the
-        Smooth L1 loss.
+        Smooth L1 loss, in the log units both sides are taken in.
+    log_offset : float
+        Added to both sides before the log, in lambda units. It is the
+        frequency below which the loss stops measuring relative error and
+        starts measuring absolute: 1.56e-4 is 500 Hz at a scale of 40 000.
     band_weights : Tensor, optional
         One weight per band, applied to the elementwise loss.
     """
@@ -33,13 +37,15 @@ class EigenvalueSupervisedLoss(nn.Module):
     def __init__(
         self,
         frequency_scale: float = 40_000.0,
-        huber_beta: float = 1.0e-2,
+        huber_beta: float = 2.0e-2,
+        log_offset: float = 1.56e-4,
         band_weights: Tensor | None = None,
     ) -> None:
         super().__init__()
 
         self.frequency_scale = float(frequency_scale)
         self.huber_beta = float(huber_beta)
+        self.log_offset = float(log_offset)
 
         if band_weights is None:
             self.register_buffer("band_weights", None)
@@ -81,10 +87,10 @@ class EigenvalueSupervisedLoss(nn.Module):
                 target_frequencies / self.frequency_scale
         ).square()
 
-        prediction = torch.log1p(
-            torch.clamp_min(predicted_eigenvalues, 0.0)
+        prediction = torch.log(
+            torch.clamp_min(predicted_eigenvalues, 0.0) + self.log_offset
         )
-        target = torch.log1p(torch.clamp_min(target_lambda, 0.0))
+        target = torch.log(torch.clamp_min(target_lambda, 0.0) + self.log_offset)
 
         element_loss = F.smooth_l1_loss(
             prediction,

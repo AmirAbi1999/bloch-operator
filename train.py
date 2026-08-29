@@ -133,6 +133,7 @@ def build_trainer(config: TrainingConfig) -> Trainer:
         EigenvalueSupervisedLoss(
             frequency_scale=config.model.frequency_scale,
             huber_beta=config.loss.huber_beta,
+            log_offset=config.loss.log_offset,
             band_weights=None if weights is None else torch.tensor(weights),
         ),
         optimizer,
