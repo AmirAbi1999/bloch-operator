@@ -57,6 +57,11 @@ class BlochDataset(Dataset):
         Dataset root holding geometry.csv, sweep.csv, data/ and images/.
     n_bands : int
         Bands kept per wave vector, counted up from the lowest.
+    n_wave_vectors : int, optional
+        Wave vectors kept per case, or None to keep every one it was
+        solved on.
+    seed : int
+        Seed of the permutation the kept wave vectors are drawn from.
     wave_columns : sequence of str
         The two sweep.csv columns holding the wave-vector components.
     frequency_column : str
@@ -67,20 +72,31 @@ class BlochDataset(Dataset):
     FileNotFoundError
         If geometry.csv or sweep.csv is missing.
     ValueError
-        If n_bands is not a positive integer, if wave_columns does not name
-        exactly two columns, if either table lacks a column this class
-        reads, or if no case owns a complete set of files.
+        If n_bands or n_wave_vectors is not a positive integer, if
+        wave_columns does not name exactly two columns, if either table
+        lacks a column this class reads, if no case owns a complete set of
+        files, or if wave vectors are kept where the cases were not solved
+        on the same ones.
     """
 
     def __init__(
         self,
         path: str | Path,
         n_bands: int = 16,
+        n_wave_vectors: int | None = None,
+        seed: int = 0,
         wave_columns: Sequence[str] = ("kx", "ky"),
         frequency_column: str = "Frequency (Hz)",
     ) -> None:
         if not isinstance(n_bands, int) or n_bands < 1:
             raise ValueError(f"n_bands must be a positive integer, got {n_bands}.")
+
+        if n_wave_vectors is not None and (
+            not isinstance(n_wave_vectors, int) or n_wave_vectors < 1
+        ):
+            raise ValueError(
+                f"n_wave_vectors must be a positive integer, got {n_wave_vectors}."
+            )
 
         self.wave_columns = tuple(wave_columns)
         if len(self.wave_columns) != 2:
@@ -101,6 +117,13 @@ class BlochDataset(Dataset):
         self.sweep = sweep.astype({"case": int}).set_index("case")
         self.cases = self._complete_cases(geometry["case"].astype(int))
 
+        # Keeping every wave vector indexes as a slice, which copies nothing
+        self.wave_index: Tensor | slice = (
+            slice(None)
+            if n_wave_vectors is None
+            else self._select_wave_vectors(n_wave_vectors, seed)
+        )
+
     def __len__(self) -> int:
         """Return the number of usable cases."""
         return len(self.cases)
@@ -117,15 +140,17 @@ class BlochDataset(Dataset):
         -------
         tuple[Tensor, Tensor, Tensor]
             image, shape (1, H, W); wave_vectors, shape (K, 2); and
-            frequencies in hertz, shape (K, n_bands).
+            frequencies in hertz, shape (K, n_bands). K is the number kept.
         """
         case = int(self.cases[index])
         wave_vectors = self._load_wave(case)
+        frequencies = self._load_frequency(case, len(wave_vectors))
 
+        # The case is read as it was solved, then cut to the kept positions
         return (
             self._load_image(case),
-            wave_vectors,
-            self._load_frequency(case, len(wave_vectors)),
+            wave_vectors[self.wave_index],
+            frequencies[self.wave_index],
         )
 
     def _complete_cases(self, cases: pd.Series) -> np.ndarray:
@@ -164,6 +189,40 @@ class BlochDataset(Dataset):
             raise ValueError(f"No case in {self.path} has a complete set of files.")
 
         return complete
+
+    def _select_wave_vectors(self, n_wave_vectors: int, seed: int) -> Tensor:
+        """Choose which of a case's wave vectors are kept.
+
+        Parameters
+        ----------
+        n_wave_vectors : int
+            Wave vectors kept per case.
+        seed : int
+            Seed of the permutation the kept positions are a prefix of.
+
+        Returns
+        -------
+        Tensor
+            Positions into one case's wave vectors, in solved order.
+
+        Raises
+        ------
+        ValueError
+            If the cases were solved on fewer than were asked for.
+        """
+
+        n_solved = len(self._load_wave(int(self.cases[0])))
+        if n_wave_vectors > n_solved:
+            raise ValueError(
+                f"{self.path} solves {n_solved} wave vectors per case, fewer "
+                f"than the requested n_wave_vectors={n_wave_vectors}."
+            )
+
+        kept = np.random.default_rng(seed).permutation(n_solved)[:n_wave_vectors]
+
+        # Sorted back into solved order, the order a fixed-grid model reads
+        # its rows in
+        return torch.from_numpy(np.sort(kept))
 
     def _load_image(self, case: int) -> Tensor:
         """Load one rendered unit-cell mask.
@@ -303,6 +362,7 @@ def make_dataloader(
     shuffle: bool = False,
     num_workers: int = 0,
     pin_memory: bool = False,
+    generator: torch.Generator | None = None,
     **dataset_kwargs: Any,
 ) -> DataLoader:
     """Create a DataLoader for one dataset split.
@@ -320,6 +380,10 @@ def make_dataloader(
     pin_memory : bool
         Stage batches in pinned memory, which a non-blocking copy to a
         cuda device needs to overlap the transfer with compute.
+    generator : torch.Generator, optional
+        Drives the shuffle and the worker seeds. Without one, they come
+        from the global torch generator, which a differently sized model
+        leaves in a different state.
     **dataset_kwargs
         Forwarded to BlochDataset.
 
@@ -336,4 +400,5 @@ def make_dataloader(
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=pin_memory,
+        generator=generator,
     )

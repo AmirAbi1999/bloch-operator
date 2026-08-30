@@ -48,6 +48,9 @@ class DataConfig:
         Supervise every wave vector on its whole D4 orbit, which is what
         carries the rest of the Brillouin zone into a run solved over the
         irreducible wedge alone.
+    n_wave_vectors : int, optional
+        Wave vectors kept per training case, or None to train on the whole
+        sweep.
     """
 
     root: Path = ROOT / "dataset"
@@ -56,6 +59,7 @@ class DataConfig:
     num_workers: int = 4
     pin_memory: bool = True
     d4_augmentation: bool = True
+    n_wave_vectors: int | None = None
 
 
 @dataclass(frozen=True)
