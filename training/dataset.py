@@ -58,10 +58,10 @@ class BlochDataset(Dataset):
     n_bands : int
         Bands kept per wave vector, counted up from the lowest.
     n_wave_vectors : int, optional
-        Wave vectors kept per case, or None to keep every one it was
-        solved on.
+        Wave vectors kept per case, drawn for that case alone, or None to
+        keep every one it was solved on.
     seed : int
-        Seed of the permutation the kept wave vectors are drawn from.
+        Seed each case draws its wave vectors under.
     wave_columns : sequence of str
         The two sweep.csv columns holding the wave-vector components.
     frequency_column : str
@@ -75,8 +75,7 @@ class BlochDataset(Dataset):
         If n_bands or n_wave_vectors is not a positive integer, if
         wave_columns does not name exactly two columns, if either table
         lacks a column this class reads, if no case owns a complete set of
-        files, or if wave vectors are kept where the cases were not solved
-        on the same ones.
+        files, or if more wave vectors are kept than a case was solved on.
     """
 
     def __init__(
@@ -117,9 +116,9 @@ class BlochDataset(Dataset):
         self.sweep = sweep.astype({"case": int}).set_index("case")
         self.cases = self._complete_cases(geometry["case"].astype(int))
 
-        # Keeping every wave vector indexes as a slice, which copies nothing
-        self.wave_index: Tensor | slice = (
-            slice(None)
+        # One row of kept positions per case, or None to keep them all
+        self.wave_index: Tensor | None = (
+            None
             if n_wave_vectors is None
             else self._select_wave_vectors(n_wave_vectors, seed)
         )
@@ -143,15 +142,17 @@ class BlochDataset(Dataset):
             frequencies in hertz, shape (K, n_bands). K is the number kept.
         """
         case = int(self.cases[index])
+        image = self._load_image(case)
         wave_vectors = self._load_wave(case)
         frequencies = self._load_frequency(case, len(wave_vectors))
 
-        # The case is read as it was solved, then cut to the kept positions
-        return (
-            self._load_image(case),
-            wave_vectors[self.wave_index],
-            frequencies[self.wave_index],
-        )
+        if self.wave_index is None:
+            return image, wave_vectors, frequencies
+
+        # The case is read as it was solved, then cut to its own draw
+        positions = self.wave_index[index]
+
+        return image, wave_vectors[positions], frequencies[positions]
 
     def _complete_cases(self, cases: pd.Series) -> np.ndarray:
         """Keep the cases owning a sweep row, a response table and an image.
@@ -191,26 +192,26 @@ class BlochDataset(Dataset):
         return complete
 
     def _select_wave_vectors(self, n_wave_vectors: int, seed: int) -> Tensor:
-        """Choose which of a case's wave vectors are kept.
+        """Draw the wave vectors each case is kept on, one draw per case.
 
         Parameters
         ----------
         n_wave_vectors : int
             Wave vectors kept per case.
         seed : int
-            Seed of the permutation the kept positions are a prefix of.
+            Seed each case draws under, beside its own id.
 
         Returns
         -------
         Tensor
-            Positions into one case's wave vectors, in solved order.
+            Positions into each case's wave vectors, shape (n_cases,
+            n_wave_vectors), each row in solved order.
 
         Raises
         ------
         ValueError
             If the cases were solved on fewer than were asked for.
         """
-
         n_solved = len(self._load_wave(int(self.cases[0])))
         if n_wave_vectors > n_solved:
             raise ValueError(
@@ -218,11 +219,13 @@ class BlochDataset(Dataset):
                 f"than the requested n_wave_vectors={n_wave_vectors}."
             )
 
-        kept = np.random.default_rng(seed).permutation(n_solved)[:n_wave_vectors]
+        positions = [
+            np.random.default_rng([seed, int(case)])
+            .permutation(n_solved)[:n_wave_vectors]
+            for case in self.cases
+        ]
 
-        # Sorted back into solved order, the order a fixed-grid model reads
-        # its rows in
-        return torch.from_numpy(np.sort(kept))
+        return torch.from_numpy(np.sort(np.stack(positions), axis=1))
 
     def _load_image(self, case: int) -> Tensor:
         """Load one rendered unit-cell mask.
