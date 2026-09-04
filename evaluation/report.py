@@ -29,7 +29,7 @@ import pandas as pd
 import torch
 from torch import Tensor
 
-from training.metrics import MetricTracker
+from .metrics import MetricTracker
 
 log = logging.getLogger(__name__)
 

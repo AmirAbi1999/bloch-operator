@@ -39,11 +39,13 @@ htmlcov/
 coverage.xml
 *.cover
 .hypothesis/
+analysis/
 
 # ---- Jupyter / IPython ----
 .ipynb_checkpoints/
 profile_default/
 ipython_config.py
+bloch_operator.ipynb
 
 # ---- COMSOL ----
 # Recovery data, backups and autosaves written next to the .mph model
@@ -56,6 +58,7 @@ ipython_config.py
 comsol*.log
 # Compiled COMSOL/Java method code
 *.class
+*.mph
 
 # ---- Simulation output & datasets ----
 # Default ComsolDatasetBuilder layout (see api/dataset_builder.py)
@@ -66,6 +69,7 @@ dataset/
 figures/
 simulation_log.csv
 dataset.csv
+*.tar
 
 # ---- Model artifacts ----
 runs/

@@ -2,8 +2,8 @@
 
 A Trainer fits one BlochOperator against solved band frequencies one epoch
 at a time: optimize over a training split, score a validation split, step
-the scheduler and checkpoint. Every run leaves history.csv, last.pt and
-best.pt in a single output directory.
+the scheduler and checkpoint. Every run leaves history.csv, last.pt, best.pt
+and the best epoch's eval-val report in a single output directory.
 
 This module contains:
     - Trainer
@@ -24,9 +24,8 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 from torch.utils.data import DataLoader
 
+from evaluation import MetricTracker, evaluate, save_evaluation_report
 from model.utils import d4_orbit, gamma_diagnostics
-
-from .metrics import MetricTracker
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +66,8 @@ class Trainer:
         Score the acoustic constraint on the first validation batch. The
         diagnostic builds a Gamma of its own and reads the model there,
         which only a model over wave vectors answers.
+    relative_floor : float
+        Smallest target frequency, in hertz, carrying a relative error.
     patience : int, optional
         Epochs without a lower validation loss before the run stops.
     output_dir : str or pathlib.Path
@@ -84,6 +85,7 @@ class Trainer:
         grad_clip: float | None = 1.0,
         d4_augmentation: bool = True,
         gamma_check: bool = True,
+        relative_floor: float = 1.0,
         patience: int | None = None,
         output_dir: str | Path = "runs",
     ) -> None:
@@ -95,6 +97,7 @@ class Trainer:
         self.grad_clip = float("inf") if grad_clip is None else grad_clip
         self.d4_augmentation = d4_augmentation
         self.gamma_check = gamma_check
+        self.relative_floor = relative_floor
         self.patience = patience
 
         self.output_dir: Path = Path(output_dir)
@@ -161,12 +164,13 @@ class Trainer:
             )
 
             self.epoch = epoch
-            self.save_checkpoint("last.pt", epoch, validation)
+            self.save_checkpoint("last.pt", epoch)
 
             if validation["loss"] < self.best_loss:
                 self.best_loss = validation["loss"]
                 improved_at = epoch
-                self.save_checkpoint("best.pt", epoch, validation)
+                self.save_checkpoint("best.pt", epoch)
+                self.save_report(val_loader, validation)
 
             elif self.patience is not None and epoch - improved_at >= self.patience:
                 log.info("Stopping at epoch %d: no gain in %d epochs.",
@@ -262,60 +266,67 @@ class Trainer:
         Returns
         -------
         dict[str, Any]
-            loss, the sample-weighted mean; metrics, the MetricTracker
-            result; and gamma, the acoustic residual and first optical
-            eigenvalue at the Gamma point.
+            The evaluate result, and gamma, the acoustic residual and
+            first optical eigenvalue at the Gamma point, empty when the
+            diagnostic is turned off.
 
         Raises
         ------
-        RuntimeError
-            If the loader yielded no batch.
+        ValueError
+            If the loader yielded no batch, from MetricTracker.compute.
         """
-        self.model.eval()
-        tracker = MetricTracker()
+        result: dict[str, Any] = evaluate(
+            self.model,
+            loader,
+            self.device,
+            criterion=self.criterion,
+            relative_floor=self.relative_floor,
+        )
+        result["gamma"] = {}
 
-        loss_sum = 0.0
-        n_samples = 0
-        gamma: dict[str, float] = {}
+        # The diagnostic reads the model at a Gamma of its own, so it takes
+        # images rather than the frequencies evaluate hands back
+        if self.gamma_check:
+            images = next(iter(loader))[0].to(self.device, non_blocking=True)
+            diagnostics = gamma_diagnostics(self.model, images)
+            result["gamma"] = {
+                "Gamma acoustic": diagnostics["max_acoustic_eigenvalue"].item(),
+                "Gamma optical": diagnostics["min_first_optical_eigenvalue"].item(),
+            }
 
-        with torch.inference_mode():
-            for index, batch in enumerate(loader):
-                images, wave_vectors, targets = (
-                    tensor.to(self.device, non_blocking=True) for tensor in batch
-                )
+        return result
 
-                output = self.model(images, wave_vectors)
-                loss = self.criterion(output["eigenvalues"], targets)
+    def save_report(self, loader: DataLoader, validation: dict[str, Any]) -> None:
+        """Write the validation report of the best epoch so far.
 
-                loss_sum += loss.item() * images.shape[0]
-                n_samples += images.shape[0]
-                tracker.update(output["frequencies"], targets)
+        It goes through the writer the test split goes through, so the two
+        reports carry the same tables and can be read against each other.
 
-                if not index and self.gamma_check:
-                    diagnostics = gamma_diagnostics(self.model, images)
-                    acoustic = diagnostics["max_acoustic_eigenvalue"]
-                    optical = diagnostics["min_first_optical_eigenvalue"]
-                    gamma = {
-                        "Gamma acoustic": acoustic.item(),
-                        "Gamma optical": optical.item(),
-                    }
+        Parameters
+        ----------
+        loader : torch.utils.data.DataLoader
+            Loader the result came from, read for its case ids.
+        validation : dict[str, Any]
+            Result of validate_epoch.
+        """
+        # A loader types its dataset as the base class, which names no cases
+        dataset: Any = loader.dataset
 
-        if not n_samples:
-            raise RuntimeError("The validation loader yielded no batch.")
-
-        return {
-            "loss": loss_sum / n_samples,
-            "metrics": tracker.compute(),
-            "gamma": gamma,
-        }
+        save_evaluation_report(
+            {**validation["metrics"], "Loss": validation["loss"]},
+            validation["predictions"],
+            validation["targets"],
+            validation["wave_vectors"],
+            dataset.cases,
+            self.output_dir / "eval-val",
+        )
 
     def save_checkpoint(
         self,
         filename: str,
         epoch: int,
-        validation: dict[str, Any],
     ) -> Path:
-        """Write the run state and one epoch's full metrics.
+        """Write the run state.
 
         Parameters
         ----------
@@ -323,9 +334,6 @@ class Trainer:
             Name of the file inside the output directory.
         epoch : int
             Epoch the state was reached at.
-        validation : dict[str, Any]
-            Result of validate_epoch, stored whole: its per-band tensors
-            are recoverable from nowhere else.
 
         Returns
         -------
@@ -335,8 +343,6 @@ class Trainer:
         state: dict[str, Any] = {
             "epoch": epoch,
             "best_loss": self.best_loss,
-            "val_loss": validation["loss"],
-            "val_metrics": validation["metrics"],
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
         }
@@ -378,7 +384,7 @@ class Trainer:
             self.scheduler.load_state_dict(state["scheduler_state_dict"])
 
         self.epoch = int(state["epoch"])
-        self.best_loss = float(state.get("best_loss", state["val_loss"]))
+        self.best_loss = float(state["best_loss"])
         log.info("Resuming %s at epoch %d.", Path(path).name, self.epoch + 1)
 
         return self.epoch + 1

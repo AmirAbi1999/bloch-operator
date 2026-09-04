@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 
 from baseline import CNNBaseline, CNNBaselineConfig
 from model.bloch_operator import BlochOperator, BlochOperatorConfig
-from training.metrics import MetricTracker
+from .metrics import MetricTracker
 
 MODELS = {
     "BlochOperator": (BlochOperator, BlochOperatorConfig),

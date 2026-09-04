@@ -6,24 +6,8 @@ Expected tensor shape::
     targets     : (B, K, n_bands)
 
 B geometries in a batch, K wave vectors, n_bands bands retained of each.
-
-Usage
------
-tracker = MetricTracker()
-
-for predictions, targets in ...:
-    tracker.update(predictions.detach(), targets)
-
-metrics = tracker.compute()
-
-Notes
------
-The tracker accumulates sufficient statistics across all batches, so metrics
-such as RMSE and R² are computed globally rather than averaged batch-wise.
-
-This module does not detach tensors or disable autograd. During training,
-pass detached predictions to metric functions. During validation/test,
-compute metrics inside "torch.inference_mode()" or "torch.no_grad()".
+The tracker sums sufficient statistics rather than averaging batch scores,
+so RMSE and R2 are exact over the split however it was batched.
 
 This module contains:
     - MetricTracker
@@ -41,13 +25,9 @@ class MetricTracker:
     Parameters
     ----------
     relative_floor : float
-        Smallest target frequency, in hertz, carrying a relative error.
-
-    Notes
-    -----
-     A target at or below
-    relative_floor, such as an acoustic mode at Gamma, carries no meaningful
-    relative error and is dropped from the relative metrics only.
+        Smallest target frequency, in hertz, carrying a relative error. A
+        target at or below it, such as an acoustic mode at Gamma, is
+        dropped from the relative metrics alone.
     """
 
     # 1 - residual / deviation, and nan wherever the targets carry no
