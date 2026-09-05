@@ -157,9 +157,9 @@ def build_trainer(config: TrainingConfig) -> Trainer:
 def build_loader(config: TrainingConfig, split: str) -> DataLoader:
     """Open one split directory under data.root as a loader.
 
-    Only the training split is shuffled, and only it reads batch_size and
-    n_wave_vectors; the rest read eval_batch_size and every wave vector
-    they were solved on.
+    Only the training split is shuffled, and only it reads batch_size,
+    n_cases and n_wave_vectors; the rest read eval_batch_size and are
+    scored whole, on every wave vector they were solved on.
 
     Returns
     -------
@@ -182,6 +182,7 @@ def build_loader(config: TrainingConfig, split: str) -> DataLoader:
         generator=torch.Generator().manual_seed(seed),
         n_bands=config.model.n_bands,
         n_wave_vectors=data.n_wave_vectors if training else None,
+        n_cases=data.n_cases if training else None,
         seed=seed,
     )
 

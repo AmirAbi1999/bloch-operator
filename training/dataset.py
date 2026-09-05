@@ -60,10 +60,16 @@ class BlochDataset(Dataset):
     n_wave_vectors : int, optional
         Wave vectors kept per case, drawn for that case alone, or None to
         keep every one it was solved on.
+    n_cases : int, optional
+        Cases kept of the split, drawn to hold every stratum in
+        proportion, or None to keep all of them.
     seed : int
-        Seed each case draws its wave vectors under.
+        Seed the case subset and each case's wave vectors are drawn under.
     wave_columns : sequence of str
         The two sweep.csv columns holding the wave-vector components.
+    strata_columns : sequence of str
+        The geometry.csv columns a stratum is defined by, read only when a
+        subset is drawn.
     frequency_column : str
         Response-table column holding the band frequencies.
 
@@ -72,10 +78,11 @@ class BlochDataset(Dataset):
     FileNotFoundError
         If geometry.csv or sweep.csv is missing.
     ValueError
-        If n_bands or n_wave_vectors is not a positive integer, if
-        wave_columns does not name exactly two columns, if either table
+        If n_bands, n_wave_vectors or n_cases is not a positive integer,
+        if wave_columns does not name exactly two columns, if either table
         lacks a column this class reads, if no case owns a complete set of
-        files, or if more wave vectors are kept than a case was solved on.
+        files, if more cases are kept than the split holds, or if more wave
+        vectors are kept than a case was solved on.
     """
 
     def __init__(
@@ -83,19 +90,19 @@ class BlochDataset(Dataset):
         path: str | Path,
         n_bands: int = 16,
         n_wave_vectors: int | None = None,
+        n_cases: int | None = None,
         seed: int = 0,
         wave_columns: Sequence[str] = ("kx", "ky"),
+        strata_columns: Sequence[str] = (
+            "harmonic_order1", "harmonic_order2", "cavity_fraction",
+        ),
         frequency_column: str = "Frequency (Hz)",
     ) -> None:
-        if not isinstance(n_bands, int) or n_bands < 1:
-            raise ValueError(f"n_bands must be a positive integer, got {n_bands}.")
-
-        if n_wave_vectors is not None and (
-            not isinstance(n_wave_vectors, int) or n_wave_vectors < 1
-        ):
-            raise ValueError(
-                f"n_wave_vectors must be a positive integer, got {n_wave_vectors}."
-            )
+        self._positive("n_bands", n_bands)
+        if n_wave_vectors is not None:
+            self._positive("n_wave_vectors", n_wave_vectors)
+        if n_cases is not None:
+            self._positive("n_cases", n_cases)
 
         self.wave_columns = tuple(wave_columns)
         if len(self.wave_columns) != 2:
@@ -105,16 +112,23 @@ class BlochDataset(Dataset):
 
         self.path: Path = Path(path)
         self.n_bands = n_bands
+        self.strata_columns = tuple(strata_columns)
         self.frequency_column = frequency_column
         self.data_dir = self.path / "data"
         self.images_dir = self.path / "images"
 
-        geometry = self._read_table(self.path / "geometry.csv", ["case"])
+        # A split is only asked for its strata when a subset is drawn from it
+        strata = [] if n_cases is None else list(self.strata_columns)
+        geometry = self._read_table(self.path / "geometry.csv", ["case", *strata])
         sweep = self._read_table(self.path / "sweep.csv", ["case", *self.wave_columns])
 
         # Case ids are the join key, not row positions: they start at 1
         self.sweep = sweep.astype({"case": int}).set_index("case")
         self.cases = self._complete_cases(geometry["case"].astype(int))
+
+        # Cut before the wave vectors, which are drawn one row per case kept
+        if n_cases is not None:
+            self.cases = self.cases[self._select_cases(geometry, n_cases, seed)]
 
         # One row of kept positions per case, or None to keep them all
         self.wave_index: Tensor | None = (
@@ -190,6 +204,67 @@ class BlochDataset(Dataset):
             raise ValueError(f"No case in {self.path} has a complete set of files.")
 
         return complete
+
+    def _select_cases(
+        self,
+        geometry: pd.DataFrame,
+        n_cases: int,
+        seed: int,
+    ) -> np.ndarray:
+        """Draw the cases the split is cut to, one shuffle per stratum.
+
+        very stratum is kept in proportion to its size, and a larger
+        n_cases only ever adds cases, so the subsets of one seed nest.
+
+        Parameters
+        ----------
+        geometry : pandas.DataFrame
+            geometry.csv, read for the columns a stratum is defined by.
+        n_cases : int
+            Cases kept of the split.
+        seed : int
+            Seed the draw is made under.
+
+        Returns
+        -------
+        numpy.ndarray
+            Positions into the case list, in the order geometry.csv lists
+            them.
+
+        Raises
+        ------
+        ValueError
+            If the split holds fewer complete cases than were asked for.
+        """
+        if n_cases > len(self.cases):
+            raise ValueError(
+                f"{self.path} holds {len(self.cases)} complete cases, fewer "
+                f"than the requested n_cases={n_cases}."
+            )
+
+        columns = list(self.strata_columns)
+        # One entry per stratum, holding the positions of its own cases.
+        strata = (
+            geometry.astype({"case": int})
+            .set_index("case")
+            .loc[self.cases, columns]
+            .groupby(columns, dropna=False)
+            .indices
+        )
+
+        # Case ids start at 1, so 0 keeps this draw off every [seed, case]
+        # stream the wave vectors take
+        generator = np.random.default_rng([seed, 0])
+
+        quantile = np.empty(len(self.cases))
+        for stratum in strata.values():
+            order = generator.permutation(len(stratum))
+            quantile[stratum] = (order + 0.5) / len(stratum)
+
+        positions = np.argsort(quantile, kind="stable")[:n_cases]
+
+        # Back into case order, the order every other table reads them in
+        return np.sort(positions)
 
     def _select_wave_vectors(self, n_wave_vectors: int, seed: int) -> Tensor:
         """Draw the wave vectors each case is kept on, one draw per case.
@@ -340,6 +415,25 @@ class BlochDataset(Dataset):
             raise ValueError(f"Missing columns in {path.name}: {', '.join(missing)}.")
 
         return table
+
+    @staticmethod
+    def _positive(name: str, value: Any) -> None:
+        """Reject a count that is not a positive integer.
+
+        Parameters
+        ----------
+        name : str
+            Name of the argument, as the message reports it.
+        value : Any
+            Value it was given.
+
+        Raises
+        ------
+        ValueError
+            If the value is not an integer of at least one.
+        """
+        if not isinstance(value, int) or value < 1:
+            raise ValueError(f"{name} must be a positive integer, got {value}.")
 
     @staticmethod
     def _real(value: Any) -> float:

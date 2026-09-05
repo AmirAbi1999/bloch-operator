@@ -51,6 +51,9 @@ class DataConfig:
     n_wave_vectors : int, optional
         Wave vectors kept per training case, or None to train on the whole
         sweep.
+    n_cases : int, optional
+        Geometries kept of the training split, drawn to hold every stratum
+        in proportion, or None to train on all of them.
     """
 
     root: Path = ROOT / "dataset"
@@ -60,6 +63,7 @@ class DataConfig:
     pin_memory: bool = True
     d4_augmentation: bool = True
     n_wave_vectors: int | None = None
+    n_cases: int | None = None
 
 
 @dataclass(frozen=True)
