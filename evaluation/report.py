@@ -7,10 +7,11 @@ frequencies, and this module writes them as tables::
     |-- metrics.json               whole-split scalars and the shape scored
     |-- per_band_metrics.csv       one row per retained band
     |-- per_geometry_metrics.csv   one row per case
-    `-- cases/case{i}.csv          one row per wave vector and mode
+    `-- cases/case{i}.csv          one row per wave vector and mode, on request
 
 One metric is one header everywhere it lands, MAE (Hz) in metrics.json
-and in the tables alike. The per-case tables are long format.
+and in the tables alike. The per-case tables are long format, and every
+row names the case it came from, so they concatenate into one frame.
 
 This module contains:
     - save_evaluation_report
@@ -19,7 +20,6 @@ This module contains:
 from __future__ import annotations
 
 import json
-import logging
 import math
 from collections.abc import Sequence
 from pathlib import Path
@@ -31,8 +31,6 @@ from torch import Tensor
 
 from .metrics import MetricTracker
 
-log = logging.getLogger(__name__)
-
 
 def save_evaluation_report(
     metrics: dict[str, Any],
@@ -42,7 +40,7 @@ def save_evaluation_report(
     case_ids: Sequence[int],
     output_dir: str | Path,
     *,
-    n_worst_cases: int | None = 20,
+    save_cases: bool = False,
 ) -> None:
     """Write every table of one evaluation into a single directory.
 
@@ -61,9 +59,8 @@ def save_evaluation_report(
         Case id of each geometry, in split order.
     output_dir : str or pathlib.Path
         Root of the layout in the module docstring.
-    n_worst_cases : int, optional
-        Cases written to cases/, the worst by MAPE. None writes one file
-        per geometry.
+    save_cases : bool
+        Write cases/, one prediction table per geometry.
 
     Raises
     ------
@@ -107,21 +104,15 @@ def save_evaluation_report(
     _per_band_table(metrics).to_csv(output_dir / "per_band_metrics.csv", index=False)
     geometry.to_csv(output_dir / "per_geometry_metrics.csv", index=False)
 
-    worst = (
-        list(range(n_geometries))
-        if n_worst_cases is None or n_worst_cases >= n_geometries
-        else geometry["MAPE (%)"].nlargest(n_worst_cases).index.tolist()
-    )
-    _write_case_tables(
-        predicted[worst],
-        target[worst],
-        wave_vectors[worst],
-        [case_ids[position] for position in worst],
-        output_dir / "cases",
-        relative_floor,
-    )
-
-    log.info("Evaluation report -> %s", output_dir)
+    if save_cases:
+        _write_case_tables(
+            predicted,
+            target,
+            wave_vectors,
+            case_ids,
+            output_dir / "cases",
+            relative_floor,
+        )
 
 
 def _scalar_metrics(metrics: dict[str, Any]) -> dict[str, float | int | None]:
@@ -262,7 +253,7 @@ def _write_case_tables(
     wave_vectors : Tensor
         Wave vectors the split was scored on, (B, K, 2).
     case_ids : sequence of int
-        Case id of each geometry, naming its file.
+        Case id of each geometry, naming its file and its rows.
     output_dir : pathlib.Path
         Directory the tables are written into.
     relative_floor : float
@@ -282,6 +273,9 @@ def _write_case_tables(
         absolute = (case_predicted - case_target).abs()
 
         pd.DataFrame({
+            # Named in the rows as well as the filename, so the tables of a
+            # split concatenate into one frame without losing whose row is whose
+            "Case": int(case),
             "kx": points[:, 0].repeat_interleave(n_bands).numpy(),
             "ky": points[:, 1].repeat_interleave(n_bands).numpy(),
             "Mode": modes.numpy(),
