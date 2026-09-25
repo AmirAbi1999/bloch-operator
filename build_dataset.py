@@ -24,10 +24,12 @@ from __future__ import annotations
 import json
 import logging
 import pathlib
+from functools import partial
 
 import pandas as pd
 
 from api import ComsolDatasetBuilder, ComsolRunner, ComsolTags
+from utils import render
 
 log = logging.getLogger(__name__)
 
@@ -181,7 +183,7 @@ def main() -> None:
         workers=WORKERS,
         cores_per_client=CORES_PER_CLIENT,
         tags=TAGS,
-        render_pixels=RENDER_PIXELS,
+        renderer=partial(render, n_pixels=RENDER_PIXELS),
     )
 
     summarize(builder.run(), builder)

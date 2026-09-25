@@ -22,29 +22,17 @@ import multiprocessing
 import os
 import pathlib
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import MISSING, fields
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from utils import CavityGeometry, render_cell
-
 from .comsol_runner import ComsolRunner, ComsolTags, SweepValues
 
 log = logging.getLogger(__name__)
 _worker_runner: ComsolRunner | None = None
-
-# Geometry-sweep column name to the type CavityGeometry expects for it
-_CAVITY_CASTS: dict[str, type] = {
-    "harmonic_order1": int,
-    "harmonic_order2": int,
-    "harmonic_amplitude1": float,
-    "harmonic_amplitude2": float,
-    "cavity_fraction": float,
-}
 
 
 def _physical_cores() -> int:
@@ -213,9 +201,8 @@ class ComsolDatasetBuilder:
         COMSOL .mph model file, loaded once per worker.
     geometry_sweep : pandas.DataFrame
         One row per case. "case" holds the integer case id, and every other
-        column is numeric and named after a COMSOL parameter. When
-        render_pixels is set, the cavity columns listed in _CAVITY_CASTS
-        must be present as well.
+        column is numeric and named after a COMSOL parameter. A renderer,
+        when one is given, reads the same row.
     auxiliary_sweep : pandas.DataFrame, optional
         Compact table with one row per case. "case" joins the row to the
         geometry sweep, and every other column is a COMSOL Auxiliary Sweep
@@ -234,10 +221,13 @@ class ComsolDatasetBuilder:
         COMSOL node tags forwarded to each worker's runner.
     rebuild_geometry, rebuild_mesh, clear_results_table : bool
         Forwarded to ComsolRunner.
-    render_pixels : int, optional
-        Side length of the rendered unit-cell mask. Rendering runs in the
-        parent process before any case is dispatched; leave as None to skip
-        it entirely.
+    renderer : callable, optional
+        Called with the geometry values of one case and returning its
+        unit-cell mask, which decides what a geometry is; this class never
+        reads the row itself. Rendering runs in the parent process before
+        any case is dispatched, and the first case is rendered eagerly so a
+        sweep the renderer cannot read fails before a worker starts. Leave
+        as None to skip rendering entirely.
 
     Raises
     ------
@@ -245,9 +235,9 @@ class ComsolDatasetBuilder:
         If model_path does not point at a file.
     ValueError
         If geometry_sweep is empty, has duplicate or non-unique case ids,
-        lacks a "case" column, lacks the cavity columns while rendering is
-        enabled, or if workers, cores_per_client or render_pixels are not
-        positive.
+        lacks a "case" column, or if workers or cores_per_client are not
+        positive. Whatever a renderer raises on the first case surfaces
+        here too.
     TypeError
         If geometry_sweep column names are not strings or its parameter
         columns are not numeric.
@@ -267,7 +257,7 @@ class ComsolDatasetBuilder:
         rebuild_geometry: bool = True,
         rebuild_mesh: bool = True,
         clear_results_table: bool = True,
-        render_pixels: int | None = None,
+        renderer: Callable[[Mapping[str, Any]], np.ndarray] | None = None,
     ) -> None:
         self.model_path: pathlib.Path = pathlib.Path(model_path).resolve()
         if not self.model_path.is_file():
@@ -302,8 +292,6 @@ class ComsolDatasetBuilder:
             raise TypeError(f"geometry_sweep columns must be numeric: {non_numeric}.")
         if workers < 1 or cores_per_client < 1:
             raise ValueError("workers and cores_per_client must be positive.")
-        if render_pixels is not None and render_pixels < 1:
-            raise ValueError("render_pixels must be positive.")
 
         available_cores = _physical_cores()
         if workers * cores_per_client > available_cores:
@@ -324,16 +312,18 @@ class ComsolDatasetBuilder:
         self.rebuild_geometry = rebuild_geometry
         self.rebuild_mesh = rebuild_mesh
         self.clear_results_table = clear_results_table
-        self.render_pixels = render_pixels
+        self.renderer = renderer
 
-        if self.render_pixels is not None:
-            self._validate_render_columns()
+        # One case is rendered and thrown away, so a sweep the renderer
+        # cannot read fails here rather than case by case into the build
+        if self.renderer is not None:
+            self.renderer(self.geometry_sweep.iloc[0].drop("case").to_dict())
 
         root = pathlib.Path(output_dir)
         self.data_dir = root / "data"
         self.images_dir = root / "images"
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        if self.render_pixels is not None:
+        if self.renderer is not None:
             self.images_dir.mkdir(parents=True, exist_ok=True)
 
         self.log_cols = [
@@ -363,7 +353,7 @@ class ComsolDatasetBuilder:
         context = multiprocessing.get_context("spawn")
 
         # Render in the parent, before any worker is handed a case
-        if self.render_pixels is not None:
+        if self.renderer is not None:
             self._render_cases(tasks)
 
         init_args = (
@@ -519,26 +509,6 @@ class ComsolDatasetBuilder:
             value = json.loads(value)
         return tuple(float(item) for item in value)
 
-    def _validate_render_columns(self) -> None:
-        """Confirm the geometry sweep can be turned into a CavityGeometry.
-
-        Raises
-        ------
-        ValueError
-            If a cavity column without a default is missing from the sweep.
-        """
-        required = [
-            field.name
-            for field in fields(CavityGeometry)
-            if field.default is MISSING
-        ]
-        missing = [name for name in required if name not in self.param_names]
-        if missing:
-            raise ValueError(
-                f"render_pixels is set but geometry_sweep lacks the cavity "
-                f"columns: {', '.join(missing)}."
-            )
-
     def _make_tasks(self) -> list[dict[str, Any]]:
         """Pair every geometry row with its Auxiliary Sweep values.
 
@@ -603,37 +573,22 @@ class ComsolDatasetBuilder:
         tasks : list[dict[str, Any]]
             Tasks produced by _make_tasks.
         """
+        # Bound once, so the type is a callable rather than an optional one
+        renderer = self.renderer
+        if renderer is None:
+            return
+
         for task in tasks:
             case = task["case"]
             try:
-                cavity = self._to_cavity_geometry(task["geometry_values"])
-                mask = render_cell(cavity, n_pixels=self.render_pixels)
-                np.save(self.images_dir / f"case{case}.npy", mask)
-
+                np.save(
+                    self.images_dir / f"case{case}.npy",
+                    renderer(task["geometry_values"]),
+                )
             except Exception as e:
                 log.warning("Render failed for case %d: %s", case, e)
 
         log.info("Geometry images -> %s", self.images_dir)
-
-    @staticmethod
-    def _to_cavity_geometry(geometry_values: Mapping[str, Any]) -> CavityGeometry:
-        """Build a CavityGeometry from the cavity columns of one case.
-
-        Parameters
-        ----------
-        geometry_values : Mapping[str, Any]
-            Parameter values of one case, cavity columns included.
-
-        Returns
-        -------
-        CavityGeometry
-            Shape parameters accepted by render_cell.
-        """
-        return CavityGeometry(**{
-            name: caster(geometry_values[name])
-            for name, caster in _CAVITY_CASTS.items()
-            if name in geometry_values
-        })
 
     def _init_log(self) -> None:
         """Create an empty simulation log with its header row."""
