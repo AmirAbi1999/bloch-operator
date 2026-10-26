@@ -1,11 +1,47 @@
-"""Symmetry augmentation and diagnostic utilities for BlochOperator."""
+"""Wave-vector broadcasting, symmetry augmentation and diagnostic utilities."""
 
 from __future__ import annotations
 
-import torch
-from torch import Tensor
+from typing import Any
 
-from .bloch_operator import BlochOperator
+import torch
+from torch import Tensor, nn
+
+
+def prepare_wavevectors(wave_vectors: Tensor, batch_size: int) -> Tensor:
+    """Broadcast wave vectors to one set per geometry, shape (B, K, 2).
+
+    Parameters
+    ----------
+    wave_vectors : Tensor
+        Wave vectors shared by the batch, shape (K, 2) or (1, K, 2), or
+        given per geometry, shape (B, K, 2).
+    batch_size : int
+        Geometries in the batch.
+
+    Returns
+    -------
+    Tensor
+        Wave vectors with shape (B, K, 2), a view of the input.
+
+    Raises
+    ------
+    ValueError
+        If wave_vectors is neither (K, 2) nor (B, K, 2), or holds a set
+        count that is neither 1 nor batch_size.
+    """
+    if wave_vectors.ndim not in (2, 3) or wave_vectors.shape[-1] != 2:
+        raise ValueError(
+            "wave_vectors must have shape (K, 2) or (B, K, 2); "
+            f"received {tuple(wave_vectors.shape)}."
+        )
+    if wave_vectors.ndim == 3 and wave_vectors.shape[0] not in (1, batch_size):
+        raise ValueError(
+            "wave_vectors must hold one set per geometry or one for the batch; "
+            f"received {wave_vectors.shape[0]} for a batch of {batch_size}."
+        )
+
+    return wave_vectors.expand(batch_size, -1, -1)
 
 
 def d4_orbit(wave_vectors: Tensor) -> Tensor:
@@ -88,7 +124,7 @@ def random_d4_transform(
 
 @torch.no_grad()
 def gamma_diagnostics(
-    model: BlochOperator,
+    model: nn.Module,
     images: Tensor,
     tolerance: float = 1.0e-8,
 ) -> dict[str, Tensor]:
@@ -96,7 +132,7 @@ def gamma_diagnostics(
 
     Parameters
     ----------
-    model : BlochOperator
+    model : torch.nn.Module
         Model evaluated at Gamma.
     images : Tensor
         Geometry images with shape (B, C, H, W).
@@ -124,7 +160,8 @@ def gamma_diagnostics(
     )
     values = model(images, gamma)["eigenvalues"][:, 0, :]
 
-    n_acoustic = model.config.n_acoustic_modes
+    config: Any = model.config
+    n_acoustic = config.n_acoustic_modes
     if values.shape[-1] <= n_acoustic:
         raise ValueError(
             "The model must retain at least one band beyond the acoustic modes."

@@ -34,9 +34,9 @@ from torch.optim.lr_scheduler import (
 )
 from torch.utils.data import DataLoader
 
-from baseline import CNNBaseline
+from baseline import CNNBaseline, CNNBaselineConfig, QCNNBaseline, QCNNBaselineConfig
 from config import OptimConfig, TrainingConfig, set_seed
-from model import BlochOperator, BlochOperatorConfig, EigenvalueSupervisedLoss
+from model import BlochOperator, EigenvalueSupervisedLoss
 from training import Trainer, make_dataloader
 
 log = logging.getLogger(__name__)
@@ -117,8 +117,17 @@ def build_trainer(config: TrainingConfig) -> Trainer:
         Trainer ready to fit, resumed from runtime.resume when it is set.
     """
     optim = config.optim
-    operator = isinstance(config.model, BlochOperatorConfig)
-    model = BlochOperator(config.model) if operator else CNNBaseline(config.model)
+
+    if isinstance(config.model, QCNNBaselineConfig):
+        model = QCNNBaseline(config.model)
+    elif isinstance(config.model, CNNBaselineConfig):
+        model = CNNBaseline(config.model)
+    else:
+        model = BlochOperator(config.model)
+
+    # The fixed-grid CNN emits one sweep and reads no wave vector, so it can be
+    # neither supervised on their orbit nor answered at a Gamma of its own
+    fixed_grid = isinstance(config.model, CNNBaselineConfig)
 
     optimizer = AdamW(
         model.parameters(),
@@ -140,10 +149,8 @@ def build_trainer(config: TrainingConfig) -> Trainer:
         resolve_device(config.runtime.device),
         scheduler=build_scheduler(optimizer, optim),
         grad_clip=optim.grad_clip,
-        # Only the operator reads the wave vectors, so only it can be
-        # supervised on their orbit or answered at a Gamma of its own
-        d4_augmentation=config.data.d4_augmentation and operator,
-        gamma_check=operator,
+        d4_augmentation=config.data.d4_augmentation and not fixed_grid,
+        gamma_check=not fixed_grid,
         patience=optim.patience,
         output_dir=config.runtime.output_dir,
     )

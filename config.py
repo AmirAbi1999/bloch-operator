@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from baseline import CNNBaselineConfig
+from baseline import CNNBaselineConfig, QCNNBaselineConfig
 from model import BlochOperatorConfig
 
 ROOT = Path(__file__).resolve().parent
@@ -156,7 +156,7 @@ class TrainingConfig:
     """One training run, described as data."""
 
     data: DataConfig = field(default_factory=DataConfig)
-    model: BlochOperatorConfig | CNNBaselineConfig = field(
+    model: BlochOperatorConfig | CNNBaselineConfig | QCNNBaselineConfig = field(
         default_factory=BlochOperatorConfig
     )
     loss: LossConfig = field(default_factory=LossConfig)

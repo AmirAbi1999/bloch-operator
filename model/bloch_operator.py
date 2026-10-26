@@ -37,6 +37,8 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor, nn
 
+from .utils import prepare_wavevectors
+
 
 class ConvBlock(nn.Module):
     """Stride-2 convolutional downsampling block.
@@ -374,50 +376,6 @@ class BlochOperator(nn.Module):
             "Gy": self.gy(latent),
         }
 
-    @staticmethod
-    def prepare_wavevectors(wave_points: Tensor, batch_size: int) -> Tensor:
-        """Convert wave-vector input to shape (B, K, 2).
-
-        Parameters
-        ----------
-        wave_points : Tensor
-            Wave vectors with shape (K, 2) or (B, K, 2).
-        batch_size : int
-            Batch size the wave vectors are broadcast against.
-
-        Returns
-        -------
-        Tensor
-            Wave vectors with shape (B, K, 2).
-
-        Raises
-        ------
-        ValueError
-            If wave_points is neither two- nor three-dimensional, if its
-            last dimension is not 2, or if its batch dimension is neither
-            1 nor batch_size.
-        """
-        if wave_points.ndim == 2:
-            if wave_points.shape[-1] != 2:
-                raise ValueError("wave-vectors are in 2-pairs")
-
-            wave_points = wave_points.unsqueeze(0).expand(batch_size, -1, -1)
-
-        elif wave_points.ndim == 3:
-            if wave_points.shape[-1] != 2:
-                raise ValueError("wave-vectors are in 2-pairs")
-            if wave_points.shape[0] == 1 and batch_size > 1:
-                wave_points = wave_points.expand(batch_size, -1, -1)
-            elif wave_points.shape[0] != batch_size:
-                raise ValueError(
-                    "The batch dimension of q_points must match images."
-                )
-
-        else:
-            raise ValueError("wave-vectors should be 2-dimensional")
-
-        return wave_points
-
     def forward(
         self,
         images: Tensor,
@@ -443,7 +401,7 @@ class BlochOperator(nn.Module):
             frequencies     (B, K, n_bands), in hertz
         """
         batch_size = images.size(0)
-        wave_vectors = self.prepare_wavevectors(wave_vectors, batch_size)
+        wave_vectors = prepare_wavevectors(wave_vectors, batch_size)
 
         # Predict geometry-dependent matrices
         predicted_operators = self.operators(images)

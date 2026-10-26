@@ -9,7 +9,12 @@ from .bloch_operator import (
     MatrixHead,
 )
 from .loss import EigenvalueSupervisedLoss
-from .utils import d4_orbit, gamma_diagnostics, random_d4_transform
+from .utils import (
+    d4_orbit,
+    gamma_diagnostics,
+    prepare_wavevectors,
+    random_d4_transform,
+)
 
 __all__ = [
     "AcousticNullHead",
@@ -21,5 +26,6 @@ __all__ = [
     "EigenvalueSupervisedLoss",
     "d4_orbit",
     "gamma_diagnostics",
+    "prepare_wavevectors",
     "random_d4_transform",
 ]

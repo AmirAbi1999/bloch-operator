@@ -19,13 +19,14 @@ import torch
 from torch import Tensor, nn
 from torch.utils.data import DataLoader
 
-from baseline import CNNBaseline, CNNBaselineConfig
+from baseline import CNNBaseline, CNNBaselineConfig, QCNNBaseline, QCNNBaselineConfig
 from model.bloch_operator import BlochOperator, BlochOperatorConfig
 from .metrics import MetricTracker
 
 MODELS = {
     "BlochOperator": (BlochOperator, BlochOperatorConfig),
     "CNNBaseline": (CNNBaseline, CNNBaselineConfig),
+    "QCNNBaseline": (QCNNBaseline, QCNNBaselineConfig),
 }
 
 
